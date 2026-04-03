@@ -495,27 +495,78 @@ function parseToTSV(text) {
   const lines = text.split('\n');
   let category = '';
   const rows = ['Category\tItem\tEssential\tNote'];
+  // Track which column index holds item/priority/notes in markdown tables
+  let colMap = null;
 
   for (const raw of lines) {
     const line = raw.trim();
     if (!line) continue;
 
-    // Detect category headers: "## Category" or "**Category**" or "Category:" at start
-    const headerMatch = line.match(/^#{1,3}\s+(.+)/) || line.match(/^\*\*(.+?)\*\*\s*$/) || line.match(/^([A-Z][A-Za-z &\/]+):$/);
+    // Detect category headers: "## Category" or "**Category**" or "CATEGORY:" at start
+    const headerMatch = line.match(/^#{1,3}\s+(.+)/) || line.match(/^\*\*(.+?)\*\*\s*$/) || line.match(/^([A-Z][A-Za-z &\/()]+):$/);
     if (headerMatch) {
       const h = headerMatch[1].trim();
-      // Skip "Key considerations" section
-      if (/key\s+considerations/i.test(h)) { category = ''; continue; }
+      // Skip meta sections
+      if (/key\s+considerations|weight\s+check|partner\s+coordination/i.test(h)) { category = ''; colMap = null; continue; }
       category = h;
+      colMap = null; // reset column mapping for new category
       continue;
     }
 
     if (!category) continue;
 
-    // Skip key-considerations prose lines
-    if (/key\s+considerations/i.test(line)) { category = ''; continue; }
+    // Skip key-considerations / weight-check prose
+    if (/key\s+considerations|weight\s+check/i.test(line)) { category = ''; colMap = null; continue; }
 
-    // Try to parse an item line: "- Item — ESSENTIAL — note" or "- Item (OPTIONAL) - note"
+    // --- Markdown table handling ---
+    // Separator row like |------|----------|-------|
+    if (/^\|[\s\-:]+\|/.test(line)) continue;
+
+    // Table header row — detect column positions
+    if (/^\|.*\bItem\b.*\|/i.test(line)) {
+      const cols = line.split('|').map(c => c.trim().toLowerCase()).filter(Boolean);
+      colMap = { item: -1, priority: -1, notes: -1 };
+      cols.forEach((c, i) => {
+        if (/^item/.test(c)) colMap.item = i;
+        else if (/priority|essential/.test(c)) colMap.priority = i;
+        else if (/note|description/.test(c)) colMap.notes = i;
+        else if (/who/.test(c)) colMap.notes = i; // "Who Carries" tables
+      });
+      continue;
+    }
+
+    // Table data row
+    if (line.startsWith('|') && line.endsWith('|')) {
+      const cells = line.split('|').slice(1, -1).map(c => c.trim());
+      if (cells.length < 2) continue;
+
+      let item = '', essential = '', note = '';
+
+      if (colMap && colMap.item >= 0) {
+        item = cells[colMap.item] || '';
+        const prio = colMap.priority >= 0 ? (cells[colMap.priority] || '') : '';
+        note = colMap.notes >= 0 ? (cells[colMap.notes] || '') : '';
+        if (/essential/i.test(prio)) essential = 'Yes';
+        else if (/optional/i.test(prio)) essential = 'Optional';
+      } else {
+        // Fallback: first cell = item, look for ESSENTIAL/OPTIONAL anywhere
+        item = cells[0];
+        const rest = cells.slice(1).join(' ');
+        if (/essential/i.test(rest)) essential = 'Yes';
+        else if (/optional/i.test(rest)) essential = 'Optional';
+        note = cells.length > 2 ? cells[cells.length - 1] : '';
+      }
+
+      // Clean markdown bold/italic
+      item = item.replace(/\*\*/g, '').replace(/[*_]/g, '').trim();
+      note = note.replace(/\*\*/g, '').replace(/[*_]/g, '').trim();
+      if (!item || item === '-') continue;
+
+      rows.push([category, item, essential, note].join('\t'));
+      continue;
+    }
+
+    // --- Bullet / dash list fallback ---
     const itemMatch = line.match(/^[-*\d.)\s]+(.+)/);
     if (!itemMatch) continue;
     let itemText = itemMatch[1].trim();
@@ -524,12 +575,10 @@ function parseToTSV(text) {
     if (/\bESSENTIAL\b/i.test(itemText)) { essential = 'Yes'; itemText = itemText.replace(/\bESSENTIAL\b/gi, ''); }
     else if (/\bOPTIONAL\b/i.test(itemText)) { essential = 'Optional'; itemText = itemText.replace(/\bOPTIONAL\b/gi, ''); }
 
-    // Split item name from note on common delimiters
     let item = itemText, note = '';
     const splitMatch = itemText.match(/^(.+?)\s*[—–\-:]\s+(.+)$/);
     if (splitMatch) { item = splitMatch[1]; note = splitMatch[2]; }
 
-    // Clean up
     item = item.replace(/^\*\*|\*\*$/g, '').replace(/[*_]/g, '').trim();
     note = note.replace(/[*_]/g, '').trim();
     if (!item) continue;
