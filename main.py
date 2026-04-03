@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import time
 from datetime import date
 from io import BytesIO
@@ -10,8 +11,10 @@ import anthropic
 import openpyxl
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 from pydantic import BaseModel, Field
 
 load_dotenv()
@@ -231,3 +234,244 @@ numbered prose paragraphs, not tables."""
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+# ---------------------------------------------------------------------------
+# xlsx export
+# ---------------------------------------------------------------------------
+
+class ExportRequest(BaseModel):
+    markdown: str
+    title: str = ""
+    group_size: str = ""
+
+
+def _parse_group_count(s: str) -> int:
+    s = s.lower().strip()
+    if "solo" in s or s == "1":
+        return 1
+    m = re.search(r"(\d+)", s)
+    if m:
+        val = int(m.group(1))
+        # "3-4 people" → 4, "5+ people" → 5
+        m2 = re.search(r"(\d+)\s*[-–]\s*(\d+)", s)
+        if m2:
+            return int(m2.group(2))
+        return val
+    return 1
+
+
+def _parse_markdown_to_rows(text: str) -> list[dict]:
+    """Parse the generated markdown into structured rows."""
+    lines = text.split("\n")
+    category = ""
+    rows = []
+    in_key_considerations = False
+
+    for raw in lines:
+        line = raw.strip()
+        if not line:
+            continue
+
+        # Detect category headers
+        header_match = (
+            re.match(r"^#{1,3}\s+(.+)", line)
+            or re.match(r"^\*\*(.+?)\*\*\s*$", line)
+        )
+        if header_match:
+            h = header_match.group(1).strip()
+            if re.search(r"key\s+considerations", h, re.I):
+                in_key_considerations = True
+                category = ""
+                continue
+            in_key_considerations = False
+            category = h
+            rows.append({"type": "header", "category": category})
+            continue
+
+        if in_key_considerations or not category:
+            continue
+
+        # Skip table separator rows
+        if re.match(r"^\|[\s\-:]+\|", line):
+            continue
+
+        # Skip table header rows
+        if re.match(r"^\|.*\bItem\b.*\|", line, re.I):
+            continue
+
+        # Table data row
+        if line.startswith("|") and line.endswith("|"):
+            cells = [c.strip() for c in line.split("|")[1:-1]]
+            if len(cells) < 2:
+                continue
+            item = re.sub(r"\*\*", "", cells[0]).strip()
+            priority = cells[1].strip() if len(cells) > 1 else ""
+            note = cells[2].strip() if len(cells) > 2 else ""
+            note = re.sub(r"[*_]", "", note)
+            if not item or item == "-":
+                continue
+            rows.append({
+                "type": "item",
+                "category": category,
+                "item": item,
+                "priority": priority,
+                "note": note,
+            })
+            continue
+
+        # Bullet list fallback
+        bullet_match = re.match(r"^[-*\d.)\s]+(.+)", line)
+        if bullet_match:
+            item_text = bullet_match.group(1).strip()
+            priority = ""
+            if re.search(r"\bOPTIONAL\b", item_text, re.I):
+                priority = "OPTIONAL"
+                item_text = re.sub(r"\bOPTIONAL\b", "", item_text, flags=re.I)
+            item_text = re.sub(r"\*\*", "", item_text).strip()
+            parts = re.split(r"\s*[—–\-:]\s+", item_text, maxsplit=1)
+            item = parts[0].strip()
+            note = parts[1].strip() if len(parts) > 1 else ""
+            if item:
+                rows.append({
+                    "type": "item",
+                    "category": category,
+                    "item": item,
+                    "priority": priority,
+                    "note": note,
+                })
+
+    return rows
+
+
+@app.post("/api/export-xlsx")
+async def export_xlsx(req: ExportRequest):
+    rows = _parse_markdown_to_rows(req.markdown)
+    person_count = _parse_group_count(req.group_size)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Packing List"
+
+    # Styles
+    header_font = Font(name="Calibri", bold=True, size=14, color="FFFFFF")
+    header_fill = PatternFill(start_color="2E4057", end_color="2E4057", fill_type="solid")
+    header_align = Alignment(horizontal="left", vertical="center")
+
+    col_header_font = Font(name="Calibri", bold=True, size=10, color="FFFFFF")
+    col_header_fill = PatternFill(start_color="4A6FA5", end_color="4A6FA5", fill_type="solid")
+
+    item_font = Font(name="Calibri", size=10)
+    optional_font = Font(name="Calibri", size=10, italic=True, color="888888")
+    note_font = Font(name="Calibri", size=9, color="666666")
+    check_font = Font(name="Calibri", size=10)
+
+    thin_border = Border(
+        left=Side(style="thin", color="CCCCCC"),
+        right=Side(style="thin", color="CCCCCC"),
+        top=Side(style="thin", color="CCCCCC"),
+        bottom=Side(style="thin", color="CCCCCC"),
+    )
+    center_align = Alignment(horizontal="center", vertical="center")
+    wrap_align = Alignment(horizontal="left", vertical="center", wrap_text=True)
+
+    # Person column names
+    person_names = []
+    if person_count == 1:
+        person_names = ["✓"]
+    else:
+        person_names = [f"Person {i+1}" for i in range(person_count)]
+
+    # Title row
+    if req.title:
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=3 + person_count)
+        cell = ws.cell(row=1, column=1, value=req.title)
+        cell.font = Font(name="Calibri", bold=True, size=16, color="2E4057")
+        cell.alignment = Alignment(horizontal="left", vertical="center")
+        ws.row_dimensions[1].height = 30
+        current_row = 3
+    else:
+        current_row = 1
+
+    total_cols = 3 + person_count  # Item, Priority, Notes, + person columns
+
+    for row_data in rows:
+        if row_data["type"] == "header":
+            # Category header — full-width merged row
+            ws.merge_cells(
+                start_row=current_row, start_column=1,
+                end_row=current_row, end_column=total_cols,
+            )
+            cell = ws.cell(row=current_row, column=1, value=row_data["category"])
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_align
+            for c in range(1, total_cols + 1):
+                ws.cell(row=current_row, column=c).fill = header_fill
+            ws.row_dimensions[current_row].height = 28
+            current_row += 1
+
+            # Column headers under each category
+            col_headers = ["Item", "Priority", "Notes"] + person_names
+            for ci, ch in enumerate(col_headers, 1):
+                cell = ws.cell(row=current_row, column=ci, value=ch)
+                cell.font = col_header_font
+                cell.fill = col_header_fill
+                cell.alignment = center_align
+                cell.border = thin_border
+            ws.row_dimensions[current_row].height = 22
+            current_row += 1
+
+        elif row_data["type"] == "item":
+            # Item name
+            cell = ws.cell(row=current_row, column=1, value=row_data["item"])
+            cell.font = optional_font if row_data["priority"].upper() == "OPTIONAL" else item_font
+            cell.alignment = wrap_align
+            cell.border = thin_border
+
+            # Priority
+            cell = ws.cell(row=current_row, column=2, value=row_data["priority"])
+            cell.font = Font(name="Calibri", size=9, italic=True, color="888888")
+            cell.alignment = center_align
+            cell.border = thin_border
+
+            # Notes
+            cell = ws.cell(row=current_row, column=3, value=row_data["note"])
+            cell.font = note_font
+            cell.alignment = wrap_align
+            cell.border = thin_border
+
+            # Person checkbox columns — empty with checkbox-style formatting
+            for pi in range(person_count):
+                cell = ws.cell(row=current_row, column=4 + pi, value="☐")
+                cell.font = check_font
+                cell.alignment = center_align
+                cell.border = thin_border
+
+            ws.row_dimensions[current_row].height = 20
+            current_row += 1
+
+    # Column widths
+    ws.column_dimensions["A"].width = 32
+    ws.column_dimensions["B"].width = 12
+    ws.column_dimensions["C"].width = 30
+    for pi in range(person_count):
+        col_letter = get_column_letter(4 + pi)
+        ws.column_dimensions[col_letter].width = 12
+
+    # Freeze panes (freeze below title)
+    ws.sheet_properties.pageSetUpPr = openpyxl.worksheet.properties.PageSetupProperties(fitToPage=True)
+
+    # Write to bytes
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = re.sub(r"[^\w\s\-]", "", req.title or "packing-list").strip()[:80] or "packing-list"
+    filename = filename.replace(" ", "_") + ".xlsx"
+
+    return Response(
+        content=buf.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )

@@ -280,6 +280,7 @@ textarea { resize: vertical; min-height: 80px; }
     <div class="btn-group" id="output-actions" style="display:none;">
       <button class="btn btn-secondary btn-sm" id="copy-text-btn">Copy text</button>
       <button class="btn btn-secondary btn-sm" id="copy-csv-btn">Copy as CSV (for Sheets)</button>
+      <button class="btn btn-secondary btn-sm" id="download-xlsx-btn">Download .xlsx</button>
       <button class="btn btn-primary btn-sm" id="new-list-btn">New list</button>
     </div>
   </div>
@@ -480,6 +481,41 @@ document.getElementById('copy-text-btn').onclick = () => {
 document.getElementById('copy-csv-btn').onclick = () => {
   const tsv = parseToTSV(currentOutput);
   navigator.clipboard.writeText(tsv).then(() => toast('Copied as TSV — paste into Google Sheets'));
+};
+
+document.getElementById('download-xlsx-btn').onclick = async () => {
+  const btn = document.getElementById('download-xlsx-btn');
+  btn.disabled = true;
+  btn.textContent = 'Generating…';
+  try {
+    const parts = [currentMeta.trip_type, currentMeta.location, currentMeta.season, currentMeta.duration].filter(Boolean);
+    const title = parts.join(' — ') || 'Packing List';
+    const res = await fetch('/api/export-xlsx', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        markdown: currentOutput,
+        title: title,
+        group_size: currentMeta.group_size || 'Solo',
+      }),
+    });
+    if (!res.ok) throw new Error('Export failed');
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = res.headers.get('Content-Disposition')?.match(/filename="(.+)"/)?.[1] || 'packing-list.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast('Downloaded .xlsx');
+  } catch (err) {
+    toast('Export failed: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Download .xlsx';
+  }
 };
 
 document.getElementById('new-list-btn').onclick = () => {
