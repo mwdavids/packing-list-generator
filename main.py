@@ -204,7 +204,13 @@ markdown table with these exact columns:
 
 | Item | Priority | Notes |
 |------|----------|-------|
-| Item name | ESSENTIAL or OPTIONAL | Brief note |
+| Item name | OPTIONAL | Only if noteworthy |
+
+Rules for the table:
+- Priority: leave blank for essential items. Only write OPTIONAL for non-essential items.
+- Notes: keep very brief (a few words). Leave blank when the item is self-explanatory. \
+No need to explain obvious gear like "pack" or "helmet". Only add a note when there is \
+something specific to this trip, season, or group that the user should know.
 
 Be specific to the trip type, season, terrain, and duration.
 

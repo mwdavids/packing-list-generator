@@ -548,6 +548,7 @@ function parseToTSV(text) {
         note = colMap.notes >= 0 ? (cells[colMap.notes] || '') : '';
         if (/essential/i.test(prio)) essential = 'Yes';
         else if (/optional/i.test(prio)) essential = 'Optional';
+        else if (!prio || prio === '-') essential = 'Yes';
       } else {
         // Fallback: first cell = item, look for ESSENTIAL/OPTIONAL anywhere
         item = cells[0];
