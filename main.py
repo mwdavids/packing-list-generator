@@ -244,6 +244,12 @@ class ExportRequest(BaseModel):
     markdown: str
     title: str = ""
     group_size: str = ""
+    trip_type: str = ""
+    location: str = ""
+    duration: str = ""
+    season: str = ""
+    weight_priority: str = ""
+    special_considerations: str = ""
 
 
 def _parse_group_count(s: str) -> int:
@@ -353,18 +359,22 @@ async def export_xlsx(req: ExportRequest):
     ws = wb.active
     ws.title = "Packing List"
 
-    # Styles
-    header_font = Font(name="Calibri", bold=True, size=14, color="FFFFFF")
-    header_fill = PatternFill(start_color="2E4057", end_color="2E4057", fill_type="solid")
-    header_align = Alignment(horizontal="left", vertical="center")
+    # --- Styles ---
+    title_font = Font(name="Calibri", bold=True, size=14)
+    detail_font = Font(name="Calibri", size=10, color="444444")
+    detail_label_font = Font(name="Calibri", size=10, bold=True, color="444444")
+    link_font = Font(name="Calibri", size=10, color="0563C1", underline="single")
 
     col_header_font = Font(name="Calibri", bold=True, size=10, color="FFFFFF")
-    col_header_fill = PatternFill(start_color="4A6FA5", end_color="4A6FA5", fill_type="solid")
+    col_header_fill = PatternFill(start_color="2E4057", end_color="2E4057", fill_type="solid")
 
     item_font = Font(name="Calibri", size=10)
-    optional_font = Font(name="Calibri", size=10, italic=True, color="888888")
+    optional_font = Font(name="Calibri", size=10, color="888888")
     note_font = Font(name="Calibri", size=9, color="666666")
-    check_font = Font(name="Calibri", size=10)
+
+    cat_fill_dark = PatternFill(start_color="D6E4F0", end_color="D6E4F0", fill_type="solid")
+    cat_fill_light = PatternFill(start_color="EBF1F8", end_color="EBF1F8", fill_type="solid")
+    cat_font = Font(name="Calibri", bold=True, size=10)
 
     thin_border = Border(
         left=Side(style="thin", color="CCCCCC"),
@@ -375,92 +385,144 @@ async def export_xlsx(req: ExportRequest):
     center_align = Alignment(horizontal="center", vertical="center")
     wrap_align = Alignment(horizontal="left", vertical="center", wrap_text=True)
 
-    # Person column names
-    person_names = []
-    if person_count == 1:
-        person_names = ["✓"]
-    else:
-        person_names = [f"Person {i+1}" for i in range(person_count)]
+    # --- Trip details header ---
+    # Build trip details string
+    details_parts = []
+    if req.duration:
+        details_parts.append(req.duration)
+    if req.season:
+        details_parts.append(f"{req.season} conditions")
+    if req.special_considerations:
+        details_parts.append(req.special_considerations)
+    details_str = ", ".join(details_parts)
 
-    # Title row
-    if req.title:
-        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=3 + person_count)
-        cell = ws.cell(row=1, column=1, value=req.title)
-        cell.font = Font(name="Calibri", bold=True, size=16, color="2E4057")
-        cell.alignment = Alignment(horizontal="left", vertical="center")
-        ws.row_dimensions[1].height = 30
-        current_row = 3
-    else:
-        current_row = 1
+    total_cols = 3 + person_count  # Category + person cols + Item + Essential + Note
 
-    total_cols = 3 + person_count  # Item, Priority, Notes, + person columns
+    r = 1
+    # Row 1: Title
+    title_text = req.title or f"{req.location or 'Packing List'}"
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=total_cols)
+    cell = ws.cell(row=r, column=1, value=title_text)
+    cell.font = title_font
+    ws.row_dimensions[r].height = 24
+
+    # Row 2: Trip details
+    if details_str:
+        r += 1
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=total_cols)
+        cell = ws.cell(row=r, column=1, value=f"Trip Details: {details_str}")
+        cell.font = detail_font
+
+    # Rows 3-6: Editable metadata fields
+    meta_fields = [
+        ("Route Map:", ""),
+        ("Live Tracking:", ""),
+        ("Start Location:", ""),
+        ("Start Date/Time:", ""),
+        ("Estimate Finish Date/Time:", ""),
+    ]
+    for label, val in meta_fields:
+        r += 1
+        cell = ws.cell(row=r, column=1, value=label)
+        cell.font = detail_label_font
+        # Leave columns 2+ empty for user to fill in
+
+    # Blank row before data
+    r += 2
+
+    # --- Column headers ---
+    person_names = ["Person 1"] if person_count == 1 else [f"Person {i+1}" for i in range(person_count)]
+    col_headers = ["Category"] + person_names + ["Item", "Essential", "Note"]
+    for ci, ch in enumerate(col_headers, 1):
+        cell = ws.cell(row=r, column=ci, value=ch)
+        cell.font = col_header_font
+        cell.fill = col_header_fill
+        cell.alignment = center_align
+        cell.border = thin_border
+    ws.row_dimensions[r].height = 22
+    header_row = r
+    r += 1
+
+    # --- Data rows ---
+    current_category = ""
+    cat_index = 0
 
     for row_data in rows:
         if row_data["type"] == "header":
-            # Category header — full-width merged row
-            ws.merge_cells(
-                start_row=current_row, start_column=1,
-                end_row=current_row, end_column=total_cols,
-            )
-            cell = ws.cell(row=current_row, column=1, value=row_data["category"])
-            cell.font = header_font
-            cell.fill = header_fill
-            cell.alignment = header_align
-            for c in range(1, total_cols + 1):
-                ws.cell(row=current_row, column=c).fill = header_fill
-            ws.row_dimensions[current_row].height = 28
-            current_row += 1
+            current_category = row_data["category"]
+            cat_index += 1
+            continue
 
-            # Column headers under each category
-            col_headers = ["Item", "Priority", "Notes"] + person_names
-            for ci, ch in enumerate(col_headers, 1):
-                cell = ws.cell(row=current_row, column=ci, value=ch)
-                cell.font = col_header_font
-                cell.fill = col_header_fill
-                cell.alignment = center_align
-                cell.border = thin_border
-            ws.row_dimensions[current_row].height = 22
-            current_row += 1
+        if row_data["type"] != "item":
+            continue
 
-        elif row_data["type"] == "item":
-            # Item name
-            cell = ws.cell(row=current_row, column=1, value=row_data["item"])
-            cell.font = optional_font if row_data["priority"].upper() == "OPTIONAL" else item_font
-            cell.alignment = wrap_align
-            cell.border = thin_border
+        fill = cat_fill_light if cat_index % 2 == 0 else None
 
-            # Priority
-            cell = ws.cell(row=current_row, column=2, value=row_data["priority"])
-            cell.font = Font(name="Calibri", size=9, italic=True, color="888888")
+        # Column A: Category
+        cell = ws.cell(row=r, column=1, value=current_category)
+        cell.font = cat_font
+        cell.alignment = wrap_align
+        cell.border = thin_border
+        if fill:
+            cell.fill = fill
+
+        # Person checkbox columns
+        for pi in range(person_count):
+            cell = ws.cell(row=r, column=2 + pi, value=False)
             cell.alignment = center_align
             cell.border = thin_border
+            if fill:
+                cell.fill = fill
 
-            # Notes
-            cell = ws.cell(row=current_row, column=3, value=row_data["note"])
-            cell.font = note_font
-            cell.alignment = wrap_align
-            cell.border = thin_border
+        # Item
+        item_col = 2 + person_count
+        cell = ws.cell(row=r, column=item_col, value=row_data["item"])
+        is_optional = row_data["priority"].upper() == "OPTIONAL"
+        cell.font = optional_font if is_optional else item_font
+        cell.alignment = wrap_align
+        cell.border = thin_border
+        if fill:
+            cell.fill = fill
 
-            # Person checkbox columns — empty with checkbox-style formatting
-            for pi in range(person_count):
-                cell = ws.cell(row=current_row, column=4 + pi, value="☐")
-                cell.font = check_font
-                cell.alignment = center_align
-                cell.border = thin_border
+        # Essential
+        priority_text = row_data["priority"]
+        if not priority_text or priority_text.upper() not in ("OPTIONAL",):
+            priority_text = "Yes"
+        else:
+            priority_text = "Optional"
+        cell = ws.cell(row=r, column=item_col + 1, value=priority_text)
+        cell.font = note_font
+        cell.alignment = center_align
+        cell.border = thin_border
+        if fill:
+            cell.fill = fill
 
-            ws.row_dimensions[current_row].height = 20
-            current_row += 1
+        # Note
+        cell = ws.cell(row=r, column=item_col + 2, value=row_data["note"])
+        cell.font = note_font
+        cell.alignment = wrap_align
+        cell.border = thin_border
+        if fill:
+            cell.fill = fill
 
-    # Column widths
-    ws.column_dimensions["A"].width = 32
-    ws.column_dimensions["B"].width = 12
-    ws.column_dimensions["C"].width = 30
+        ws.row_dimensions[r].height = 20
+        r += 1
+
+    # --- Column widths ---
+    ws.column_dimensions["A"].width = 28  # Category
     for pi in range(person_count):
-        col_letter = get_column_letter(4 + pi)
-        ws.column_dimensions[col_letter].width = 12
+        ws.column_dimensions[get_column_letter(2 + pi)].width = 10  # Person cols
+    item_letter = get_column_letter(2 + person_count)
+    ws.column_dimensions[item_letter].width = 38  # Item
+    ws.column_dimensions[get_column_letter(3 + person_count)].width = 10  # Essential
+    ws.column_dimensions[get_column_letter(4 + person_count)].width = 35  # Note
 
-    # Freeze panes (freeze below title)
-    ws.sheet_properties.pageSetUpPr = openpyxl.worksheet.properties.PageSetupProperties(fitToPage=True)
+    # Freeze panes below column headers
+    ws.freeze_panes = ws.cell(row=header_row + 1, column=1)
+
+    # Auto-filter on the data range
+    last_col_letter = get_column_letter(total_cols + 2)
+    ws.auto_filter.ref = f"A{header_row}:{last_col_letter}{r - 1}"
 
     # Write to bytes
     buf = BytesIO()

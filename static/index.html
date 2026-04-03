@@ -497,6 +497,12 @@ document.getElementById('download-xlsx-btn').onclick = async () => {
         markdown: currentOutput,
         title: title,
         group_size: currentMeta.group_size || 'Solo',
+        trip_type: currentMeta.trip_type || '',
+        location: currentMeta.location || '',
+        duration: currentMeta.duration || '',
+        season: currentMeta.season || '',
+        weight_priority: currentMeta.weight_priority || '',
+        special_considerations: currentMeta.special_considerations || '',
       }),
     });
     if (!res.ok) throw new Error('Export failed');
