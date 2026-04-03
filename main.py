@@ -2,11 +2,14 @@ import json
 import os
 import time
 from datetime import date
+from io import BytesIO
 from pathlib import Path
+from typing import List
 
 import anthropic
+import openpyxl
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -98,6 +101,66 @@ async def delete_list(list_id: str):
         raise HTTPException(status_code=404, detail="List not found")
     _write_lists(filtered)
     return {"ok": True}
+
+
+@app.post("/api/import-xlsx")
+async def import_xlsx(files: List[UploadFile]):
+    """Bulk import .xlsx files as gear lists. Extracts all sheets from each file."""
+    imported = []
+    lists = _read_lists()
+
+    for upload in files:
+        if not upload.filename:
+            continue
+        raw = await upload.read()
+        try:
+            wb = openpyxl.load_workbook(BytesIO(raw), read_only=True, data_only=True)
+        except Exception:
+            continue
+
+        # Derive a name from the filename (strip extension)
+        base_name = Path(upload.filename).stem
+
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            rows = []
+            for row in ws.iter_rows(values_only=True):
+                cells = [str(c).strip() if c is not None else "" for c in row]
+                line = "\t".join(cells).strip()
+                if line and line != "\t" * len(cells):
+                    rows.append(line)
+            if not rows:
+                continue
+
+            # Use sheet name in the list name if the workbook has multiple sheets
+            name = base_name if len(wb.sheetnames) == 1 else f"{base_name} — {sheet_name}"
+            content = "\n".join(rows)
+
+            # Guess trip type from filename keywords
+            lower = base_name.lower()
+            trip_type = ""
+            for kw, tt in [("climb", "alpine climbing"), ("ski", "ski touring"),
+                           ("backpack", "backpacking"), ("hik", "day hiking"),
+                           ("raft", "rafting/paddling"), ("river", "rafting/paddling"),
+                           ("camp", "car camping"), ("snow camp", "snow camping")]:
+                if kw in lower:
+                    trip_type = tt
+                    break
+
+            entry = {
+                "id": str(int(time.time() * 1000) + len(imported)),
+                "name": name[:200],
+                "type": trip_type,
+                "date_added": date.today().isoformat(),
+                "content": content[:500_000],
+            }
+            lists.append(entry)
+            imported.append({"name": entry["name"], "type": entry["type"], "items": len(rows)})
+
+        wb.close()
+
+    _write_lists(lists)
+    return {"imported": imported, "count": len(imported)}
 
 
 @app.post("/api/generate")

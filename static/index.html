@@ -121,6 +121,16 @@ textarea { resize: vertical; min-height: 80px; }
 .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--text-muted); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* Bulk import */
+.bulk-import {
+  background: var(--surface); border: 2px dashed var(--border);
+  border-radius: var(--radius); padding: 24px; text-align: center;
+  margin-bottom: 16px; transition: border-color 0.2s;
+}
+.bulk-import.drag-over { border-color: var(--accent); }
+.bulk-import p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 10px; }
+.bulk-import .result { margin-top: 12px; font-size: 0.85rem; color: var(--success); }
+
 @media (max-width: 600px) {
   .form-grid { grid-template-columns: 1fr; }
   .tabs { overflow-x: auto; }
@@ -222,6 +232,13 @@ textarea { resize: vertical; min-height: 80px; }
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
       <h2 style="font-size:1.1rem;">Saved lists</h2>
       <button class="btn btn-secondary btn-sm" id="show-add-form-btn">+ Add list</button>
+    </div>
+
+    <div class="bulk-import" id="bulk-import-zone">
+      <p>Bulk import — drop <strong>.xlsx</strong> files here or click to select</p>
+      <input type="file" id="bulk-file-input" multiple accept=".xlsx" style="display:none;">
+      <button class="btn btn-secondary btn-sm" id="bulk-browse-btn">Choose .xlsx files</button>
+      <div class="result" id="bulk-result"></div>
     </div>
 
     <div id="add-form-container" class="add-form" style="display:none;">
@@ -526,6 +543,45 @@ function parseToTSV(text) {
 // Init
 // ---------------------------------------------------------------------------
 loadLists();
+
+// ---------------------------------------------------------------------------
+// Bulk xlsx import
+// ---------------------------------------------------------------------------
+const bulkZone = document.getElementById('bulk-import-zone');
+const bulkInput = document.getElementById('bulk-file-input');
+const bulkResult = document.getElementById('bulk-result');
+
+document.getElementById('bulk-browse-btn').onclick = () => bulkInput.click();
+bulkInput.addEventListener('change', () => { if (bulkInput.files.length) uploadXlsx(bulkInput.files); });
+
+bulkZone.addEventListener('dragover', (e) => { e.preventDefault(); bulkZone.classList.add('drag-over'); });
+bulkZone.addEventListener('dragleave', () => bulkZone.classList.remove('drag-over'));
+bulkZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  bulkZone.classList.remove('drag-over');
+  const files = [...e.dataTransfer.files].filter(f => f.name.endsWith('.xlsx'));
+  if (files.length) uploadXlsx(files);
+});
+
+async function uploadXlsx(fileList) {
+  bulkResult.textContent = 'Importing…';
+  const fd = new FormData();
+  for (const f of fileList) fd.append('files', f);
+  try {
+    const res = await fetch('/api/import-xlsx', { method: 'POST', body: fd });
+    const data = await res.json();
+    if (data.count === 0) {
+      bulkResult.textContent = 'No lists found in the uploaded files.';
+    } else {
+      bulkResult.textContent = `Imported ${data.count} list${data.count > 1 ? 's' : ''}: ${data.imported.map(i => i.name).join(', ')}`;
+    }
+    bulkInput.value = '';
+    loadLists();
+    toast(`Imported ${data.count} list${data.count > 1 ? 's' : ''}`);
+  } catch (err) {
+    bulkResult.textContent = 'Import failed: ' + err.message;
+  }
+}
 </script>
 </body>
 </html>
