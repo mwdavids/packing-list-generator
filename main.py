@@ -468,9 +468,9 @@ async def export_xlsx(req: ExportRequest):
         if fill:
             cell.fill = fill
 
-        # Person checkbox columns
+        # Person checkbox columns — blank cells, user adds checkboxes in Sheets
         for pi in range(person_count):
-            cell = ws.cell(row=r, column=2 + pi, value=False)
+            cell = ws.cell(row=r, column=2 + pi)
             cell.alignment = center_align
             cell.border = thin_border
             if fill:
