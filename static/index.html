@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Packing List Generator</title>
+<style>
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --surface2: #0f3460;
+  --accent: #e94560;
+  --accent-hover: #ff6b81;
+  --text: #eaeaea;
+  --text-muted: #a0a0b0;
+  --border: #2a2a4a;
+  --success: #4ecdc4;
+  --radius: 8px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+.container { max-width: 900px; margin: 0 auto; padding: 20px; }
+header { text-align: center; padding: 24px 0 16px; }
+header h1 { font-size: 1.6rem; font-weight: 600; }
+header p { color: var(--text-muted); font-size: 0.9rem; margin-top: 4px; }
+
+/* Tabs */
+.tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin-bottom: 20px; }
+.tab-btn {
+  background: none; border: none; color: var(--text-muted); padding: 10px 20px;
+  cursor: pointer; font-size: 0.95rem; border-bottom: 2px solid transparent;
+  margin-bottom: -2px; transition: all 0.2s;
+}
+.tab-btn:hover { color: var(--text); }
+.tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab-btn .badge {
+  background: var(--accent); color: #fff; font-size: 0.7rem;
+  padding: 1px 6px; border-radius: 10px; margin-left: 6px;
+}
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* Forms */
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-group { display: flex; flex-direction: column; gap: 4px; }
+.form-group.full { grid-column: 1 / -1; }
+label { font-size: 0.85rem; color: var(--text-muted); }
+input, select, textarea {
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  padding: 10px 12px; border-radius: var(--radius); font-size: 0.95rem;
+  font-family: inherit;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+textarea { resize: vertical; min-height: 80px; }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 10px 20px; border: none; border-radius: var(--radius);
+  font-size: 0.95rem; cursor: pointer; transition: all 0.2s; font-family: inherit;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-secondary {
+  background: var(--surface2); color: var(--text); border: 1px solid var(--border);
+}
+.btn-secondary:hover { border-color: var(--accent); }
+.btn-danger { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 6px 12px; font-size: 0.8rem; }
+.btn-danger:hover { background: var(--accent); color: #fff; }
+.btn-sm { padding: 6px 14px; font-size: 0.85rem; }
+.btn-group { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+
+/* Lists */
+.list-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px; margin-bottom: 10px;
+}
+.list-card-header { display: flex; justify-content: space-between; align-items: start; }
+.list-card h3 { font-size: 1rem; font-weight: 600; }
+.list-card .meta { color: var(--text-muted); font-size: 0.8rem; margin-top: 4px; }
+.list-card .preview {
+  margin-top: 10px; padding: 10px; background: var(--bg); border-radius: 4px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.8rem;
+  color: var(--text-muted); white-space: pre-wrap; max-height: 100px; overflow: hidden;
+}
+.empty-state { text-align: center; padding: 40px; color: var(--text-muted); }
+
+/* Add list form */
+.add-form {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px; margin-bottom: 16px;
+}
+.add-form h3 { margin-bottom: 14px; font-size: 1rem; }
+
+/* Output area */
+.output-header { margin-bottom: 12px; }
+.output-header h2 { font-size: 1.1rem; }
+.output-header .meta { color: var(--text-muted); font-size: 0.85rem; margin-top: 4px; }
+#output {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 20px; min-height: 200px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.88rem;
+  line-height: 1.6; white-space: pre-wrap; overflow-y: auto; max-height: 70vh;
+}
+
+/* Toast */
+.toast {
+  position: fixed; bottom: 24px; right: 24px; background: var(--success);
+  color: #111; padding: 10px 20px; border-radius: var(--radius);
+  font-size: 0.9rem; opacity: 0; transition: opacity 0.3s; pointer-events: none; z-index: 100;
+}
+.toast.show { opacity: 1; }
+
+/* Loading spinner */
+.spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--text-muted); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 600px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .tabs { overflow-x: auto; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>&#9968; Packing List Generator</h1>
+    <p>AI-powered packing lists informed by your gear library</p>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="generate">Generate</button>
+    <button class="tab-btn" data-tab="lists">My Lists <span class="badge" id="list-count">0</span></button>
+    <button class="tab-btn" data-tab="current">Current List</button>
+  </div>
+
+  <!-- ===== TAB 1: GENERATE ===== -->
+  <div id="tab-generate" class="tab-panel active">
+    <form id="generate-form" class="form-grid">
+      <div class="form-group">
+        <label for="trip_type">Trip type</label>
+        <select id="trip_type" required>
+          <option value="">Select…</option>
+          <option>Alpine climbing</option>
+          <option>Ski touring</option>
+          <option>Backcountry skiing</option>
+          <option>Backpacking</option>
+          <option>Rafting/paddling</option>
+          <option>Car camping</option>
+          <option>Snow camping</option>
+          <option>Day hiking</option>
+          <option>Rock climbing</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="location">Location / objective</label>
+        <input type="text" id="location" placeholder="e.g. Mt. Rainier, Enchantments">
+      </div>
+      <div class="form-group">
+        <label for="duration">Duration</label>
+        <select id="duration">
+          <option value="">Select…</option>
+          <option>Day trip</option>
+          <option>Overnight</option>
+          <option>2–3 days</option>
+          <option>4–5 days</option>
+          <option>Week+</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="season">Season</label>
+        <select id="season">
+          <option value="">Select…</option>
+          <option>Spring</option>
+          <option>Summer</option>
+          <option>Fall</option>
+          <option>Winter</option>
+          <option>Shoulder/mixed</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="group_size">Group size</label>
+        <select id="group_size">
+          <option value="">Select…</option>
+          <option>Solo</option>
+          <option>2 people</option>
+          <option>3–4 people</option>
+          <option>5+ people</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="weight_priority">Weight priority</label>
+        <select id="weight_priority">
+          <option value="">Select…</option>
+          <option>Ultralight</option>
+          <option>Lightweight (balanced)</option>
+          <option>Comfort</option>
+        </select>
+      </div>
+      <div class="form-group full">
+        <label for="special_considerations">Special considerations</label>
+        <input type="text" id="special_considerations" placeholder="e.g. kid in group, plant-based meals, someone new to skiing">
+      </div>
+      <div class="form-group full">
+        <label for="notes">Additional notes</label>
+        <textarea id="notes" rows="3" placeholder="Any extra context for the list…"></textarea>
+      </div>
+      <div class="form-group full">
+        <button type="submit" class="btn btn-primary" id="generate-btn">Generate packing list</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- ===== TAB 2: MY LISTS ===== -->
+  <div id="tab-lists" class="tab-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h2 style="font-size:1.1rem;">Saved lists</h2>
+      <button class="btn btn-secondary btn-sm" id="show-add-form-btn">+ Add list</button>
+    </div>
+
+    <div id="add-form-container" class="add-form" style="display:none;">
+      <h3>Add a past packing list</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label for="add-name">Name</label>
+          <input type="text" id="add-name" placeholder="e.g. Rainier Muir 2024">
+        </div>
+        <div class="form-group">
+          <label for="add-type">Trip type</label>
+          <input type="text" id="add-type" placeholder="e.g. alpine climbing">
+        </div>
+        <div class="form-group full">
+          <label for="add-file">Import from file (.csv, .tsv, .txt)</label>
+          <input type="file" id="add-file" accept=".csv,.tsv,.txt" style="padding:8px;">
+        </div>
+        <div class="form-group full">
+          <label for="add-content">Paste content (any format)</label>
+          <textarea id="add-content" rows="8" placeholder="Paste your list here — any format works (bullets, numbered, TSV, freeform)…"></textarea>
+        </div>
+        <div class="form-group full btn-group">
+          <button class="btn btn-primary btn-sm" id="save-list-btn">Save</button>
+          <button class="btn btn-secondary btn-sm" id="cancel-add-btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="lists-container"></div>
+  </div>
+
+  <!-- ===== TAB 3: CURRENT LIST ===== -->
+  <div id="tab-current" class="tab-panel">
+    <div class="output-header">
+      <h2 id="output-title">No list generated yet</h2>
+      <div class="meta" id="output-meta"></div>
+    </div>
+    <div id="output"></div>
+    <div class="btn-group" id="output-actions" style="display:none;">
+      <button class="btn btn-secondary btn-sm" id="copy-text-btn">Copy text</button>
+      <button class="btn btn-secondary btn-sm" id="copy-csv-btn">Copy as CSV (for Sheets)</button>
+      <button class="btn btn-primary btn-sm" id="new-list-btn">New list</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ---------------------------------------------------------------------------
+// Tab switching
+// ---------------------------------------------------------------------------
+const tabBtns = document.querySelectorAll('.tab-btn');
+const panels  = document.querySelectorAll('.tab-panel');
+
+function switchTab(name) {
+  tabBtns.forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  panels.forEach(p => p.classList.toggle('active', p.id === 'tab-' + name));
+}
+tabBtns.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
+
+// ---------------------------------------------------------------------------
+// Toast
+// ---------------------------------------------------------------------------
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+// ---------------------------------------------------------------------------
+// Lists management
+// ---------------------------------------------------------------------------
+let savedLists = [];
+
+async function loadLists() {
+  const res = await fetch('/api/lists');
+  savedLists = await res.json();
+  document.getElementById('list-count').textContent = savedLists.length;
+  renderLists();
+}
+
+function renderLists() {
+  const c = document.getElementById('lists-container');
+  if (savedLists.length === 0) {
+    c.innerHTML = '<div class="empty-state">No saved lists yet. Add your past packing lists to personalize future generations.</div>';
+    return;
+  }
+  c.innerHTML = savedLists.map(l => {
+    const lines = l.content.split('\n').filter(x => x.trim());
+    const preview = lines.slice(0, 5).join('\n') + (lines.length > 5 ? '\n…' : '');
+    return `
+      <div class="list-card">
+        <div class="list-card-header">
+          <div>
+            <h3>${esc(l.name)}</h3>
+            <div class="meta">${esc(l.type)} &middot; ${l.date_added} &middot; ${lines.length} items</div>
+          </div>
+          <button class="btn btn-danger btn-sm" onclick="deleteList('${l.id}')">Delete</button>
+        </div>
+        <div class="preview">${esc(preview)}</div>
+      </div>`;
+  }).join('');
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// Add list form
+const addFormContainer = document.getElementById('add-form-container');
+document.getElementById('show-add-form-btn').onclick = () => { addFormContainer.style.display = 'block'; };
+document.getElementById('cancel-add-btn').onclick = () => { addFormContainer.style.display = 'none'; clearAddForm(); };
+
+document.getElementById('add-file').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => { document.getElementById('add-content').value = ev.target.result; };
+  reader.readAsText(file);
+});
+
+function clearAddForm() {
+  document.getElementById('add-name').value = '';
+  document.getElementById('add-type').value = '';
+  document.getElementById('add-content').value = '';
+  document.getElementById('add-file').value = '';
+}
+
+document.getElementById('save-list-btn').onclick = async () => {
+  const name = document.getElementById('add-name').value.trim();
+  const type = document.getElementById('add-type').value.trim();
+  const content = document.getElementById('add-content').value.trim();
+  if (!name || !content) { alert('Name and content are required.'); return; }
+  await fetch('/api/lists', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name, type, content }),
+  });
+  addFormContainer.style.display = 'none';
+  clearAddForm();
+  toast('List saved');
+  loadLists();
+};
+
+window.deleteList = async (id) => {
+  if (!confirm('Delete this list?')) return;
+  await fetch('/api/lists/' + id, { method: 'DELETE' });
+  toast('List deleted');
+  loadLists();
+};
+
+// ---------------------------------------------------------------------------
+// Generate
+// ---------------------------------------------------------------------------
+let currentOutput = '';
+let currentMeta = {};
+
+document.getElementById('generate-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fields = ['trip_type','location','duration','season','group_size','weight_priority','special_considerations','notes'];
+  const body = {};
+  fields.forEach(f => body[f] = document.getElementById(f).value);
+
+  // Switch to current tab
+  switchTab('current');
+
+  const btn = document.getElementById('generate-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Generating…';
+
+  // Set header
+  const parts = [body.trip_type, body.location, body.season, body.duration].filter(Boolean);
+  document.getElementById('output-title').textContent = parts.join(' · ') || 'Packing list';
+  const metaParts = [body.group_size, body.weight_priority].filter(Boolean);
+  if (savedLists.length > 0) metaParts.push('informed by ' + savedLists.length + ' saved list' + (savedLists.length > 1 ? 's' : ''));
+  document.getElementById('output-meta').textContent = metaParts.join(' · ');
+  currentMeta = body;
+
+  const outputEl = document.getElementById('output');
+  outputEl.textContent = '';
+  currentOutput = '';
+  document.getElementById('output-actions').style.display = 'none';
+
+  try {
+    const res = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      outputEl.textContent = 'Error: ' + (err.detail || 'Generation failed');
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        const payload = line.slice(6);
+        if (payload === '[DONE]') break;
+        try {
+          const text = JSON.parse(payload);
+          currentOutput += text;
+          outputEl.textContent = currentOutput;
+          outputEl.scrollTop = outputEl.scrollHeight;
+        } catch {}
+      }
+    }
+  } catch (err) {
+    outputEl.textContent = 'Error: ' + err.message;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Generate packing list';
+    document.getElementById('output-actions').style.display = 'flex';
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Output actions
+// ---------------------------------------------------------------------------
+document.getElementById('copy-text-btn').onclick = () => {
+  navigator.clipboard.writeText(currentOutput).then(() => toast('Copied to clipboard'));
+};
+
+document.getElementById('copy-csv-btn').onclick = () => {
+  const tsv = parseToTSV(currentOutput);
+  navigator.clipboard.writeText(tsv).then(() => toast('Copied as TSV — paste into Google Sheets'));
+};
+
+document.getElementById('new-list-btn').onclick = () => {
+  currentOutput = '';
+  document.getElementById('output').textContent = '';
+  document.getElementById('output-title').textContent = 'No list generated yet';
+  document.getElementById('output-meta').textContent = '';
+  document.getElementById('output-actions').style.display = 'none';
+  switchTab('generate');
+};
+
+function parseToTSV(text) {
+  const lines = text.split('\n');
+  let category = '';
+  const rows = ['Category\tItem\tEssential\tNote'];
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+
+    // Detect category headers: "## Category" or "**Category**" or "Category:" at start
+    const headerMatch = line.match(/^#{1,3}\s+(.+)/) || line.match(/^\*\*(.+?)\*\*\s*$/) || line.match(/^([A-Z][A-Za-z &\/]+):$/);
+    if (headerMatch) {
+      const h = headerMatch[1].trim();
+      // Skip "Key considerations" section
+      if (/key\s+considerations/i.test(h)) { category = ''; continue; }
+      category = h;
+      continue;
+    }
+
+    if (!category) continue;
+
+    // Skip key-considerations prose lines
+    if (/key\s+considerations/i.test(line)) { category = ''; continue; }
+
+    // Try to parse an item line: "- Item — ESSENTIAL — note" or "- Item (OPTIONAL) - note"
+    const itemMatch = line.match(/^[-*\d.)\s]+(.+)/);
+    if (!itemMatch) continue;
+    let itemText = itemMatch[1].trim();
+
+    let essential = '';
+    if (/\bESSENTIAL\b/i.test(itemText)) { essential = 'Yes'; itemText = itemText.replace(/\bESSENTIAL\b/gi, ''); }
+    else if (/\bOPTIONAL\b/i.test(itemText)) { essential = 'Optional'; itemText = itemText.replace(/\bOPTIONAL\b/gi, ''); }
+
+    // Split item name from note on common delimiters
+    let item = itemText, note = '';
+    const splitMatch = itemText.match(/^(.+?)\s*[—–\-:]\s+(.+)$/);
+    if (splitMatch) { item = splitMatch[1]; note = splitMatch[2]; }
+
+    // Clean up
+    item = item.replace(/^\*\*|\*\*$/g, '').replace(/[*_]/g, '').trim();
+    note = note.replace(/[*_]/g, '').trim();
+    if (!item) continue;
+
+    rows.push([category, item, essential, note].join('\t'));
+  }
+  return rows.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+loadLists();
+</script>
+</body>
+</html>
