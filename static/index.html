@@ -6,15 +6,15 @@
 <title>Packing List Generator</title>
 <style>
 :root {
-  --bg: #1a1a2e;
-  --surface: #16213e;
-  --surface2: #0f3460;
-  --accent: #e94560;
-  --accent-hover: #ff6b81;
-  --text: #eaeaea;
-  --text-muted: #a0a0b0;
-  --border: #2a2a4a;
-  --success: #4ecdc4;
+  --bg: #1c1c1c;
+  --surface: #272727;
+  --surface2: #333333;
+  --accent: #c4875b;
+  --accent-hover: #d9a07a;
+  --text: #e8e4df;
+  --text-muted: #9a958e;
+  --border: #3d3937;
+  --success: #7daa6e;
   --radius: 8px;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -105,9 +105,19 @@ textarea { resize: vertical; min-height: 80px; }
 #output {
   background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--radius); padding: 20px; min-height: 200px;
-  font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 0.88rem;
-  line-height: 1.6; white-space: pre-wrap; overflow-y: auto; max-height: 70vh;
+  font-family: inherit; font-size: 0.9rem;
+  line-height: 1.6; overflow-y: auto; max-height: 70vh;
 }
+#output h1, #output h2, #output h3 { margin: 1.2em 0 0.4em; font-size: 1rem; color: var(--accent); }
+#output h1:first-child, #output h2:first-child { margin-top: 0; }
+#output table { width: 100%; border-collapse: collapse; margin: 0.5em 0 1.2em; font-size: 0.85rem; }
+#output th, #output td { text-align: left; padding: 6px 10px; border: 1px solid var(--border); }
+#output th { background: var(--surface2); color: var(--text-muted); font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.03em; }
+#output tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+#output hr { border: none; border-top: 1px solid var(--border); margin: 1em 0; }
+#output ol, #output ul { padding-left: 1.4em; margin: 0.4em 0; }
+#output p { margin: 0.4em 0; }
+#output strong { color: var(--text); }
 
 /* Toast */
 .toast {
@@ -136,12 +146,13 @@ textarea { resize: vertical; min-height: 80px; }
   .tabs { overflow-x: auto; }
 }
 </style>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
 <div class="container">
   <header>
-    <h1>&#9968; Packing List Generator</h1>
-    <p>AI-powered packing lists informed by your gear library</p>
+    <h1><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px;margin-right:4px;"><polyline points="2,20 7,12 10,15 15,5 20,13 22,20"/></svg>Packing List Generator</h1>
+    <p class="subtitle">Upload past packing lists to refine results, or jump straight to generating a new one.</p>
   </header>
 
   <div class="tabs">
@@ -158,8 +169,8 @@ textarea { resize: vertical; min-height: 80px; }
         <select id="trip_type" required>
           <option value="">Select…</option>
           <option>Alpine climbing</option>
-          <option>Ski touring</option>
-          <option>Backcountry skiing</option>
+          <option>Ski touring / backcountry skiing</option>
+          <option>Ski mountaineering</option>
           <option>Backpacking</option>
           <option>Rafting/paddling</option>
           <option>Car camping</option>
@@ -196,13 +207,7 @@ textarea { resize: vertical; min-height: 80px; }
       </div>
       <div class="form-group">
         <label for="group_size">Group size</label>
-        <select id="group_size">
-          <option value="">Select…</option>
-          <option>Solo</option>
-          <option>2 people</option>
-          <option>3–4 people</option>
-          <option>5+ people</option>
-        </select>
+        <input type="text" id="group_size" placeholder="e.g. 4 people or 2 adults, 1 pre-teen">
       </div>
       <div class="form-group">
         <label for="weight_priority">Weight priority</label>
@@ -414,10 +419,19 @@ document.getElementById('generate-form').addEventListener('submit', async (e) =>
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Generating…';
 
-  // Set header
-  const parts = [body.trip_type, body.location, body.season, body.duration].filter(Boolean);
-  document.getElementById('output-title').textContent = parts.join(' · ') || 'Packing list';
-  const metaParts = [body.group_size, body.weight_priority].filter(Boolean);
+  // Set header — synthesize a short trip summary
+    const summaryParts = [];
+    if (body.duration && body.trip_type) summaryParts.push(body.duration.toLowerCase() + ' ' + body.trip_type.toLowerCase());
+    else if (body.trip_type) summaryParts.push(body.trip_type);
+    if (body.location) summaryParts.push(body.location);
+    if (body.season) summaryParts.push(body.season.toLowerCase());
+    if (body.group_size) summaryParts.push('for ' + body.group_size.toLowerCase());
+    if (body.weight_priority) summaryParts.push('(' + body.weight_priority.toLowerCase() + ')');
+    const title = summaryParts.length ? summaryParts.join(', ') : 'Packing list';
+    // Capitalize first letter
+    document.getElementById('output-title').textContent = title.charAt(0).toUpperCase() + title.slice(1);
+    const metaParts = [];
+    if (body.special_considerations) metaParts.push(body.special_considerations);
   if (savedLists.length > 0) metaParts.push('informed by ' + savedLists.length + ' saved list' + (savedLists.length > 1 ? 's' : ''));
   document.getElementById('output-meta').textContent = metaParts.join(' · ');
   currentMeta = body;
@@ -457,7 +471,7 @@ document.getElementById('generate-form').addEventListener('submit', async (e) =>
         try {
           const text = JSON.parse(payload);
           currentOutput += text;
-          outputEl.textContent = currentOutput;
+          outputEl.innerHTML = marked.parse(currentOutput);
           outputEl.scrollTop = outputEl.scrollHeight;
         } catch {}
       }
