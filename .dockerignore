@@ -1,0 +1,6 @@
+.env
+lists.json
+__pycache__
+*.pyc
+*.pyo
+.git

@@ -61,5 +61,51 @@ Change to any Anthropic model string (e.g. `claude-sonnet-4-20250514`). Swapping
 - **Multiple users / profiles** — profile field per list, profile selector in UI
 - **Tagging and filtering** — filter library by trip type, season, year
 - **List diffing** — compare two generated lists side by side
-- **Web deployment** — deploy to VPS or Railway/Fly.io with password gate
 - **Alternative models** — swap to GPT-4o, Gemini, or local Ollama via config
+
+## Deploying to Fly.io
+
+Share the app with friends — password-protected, runs on Fly.io free tier.
+
+### Prerequisites
+
+Install the Fly CLI: https://fly.io/docs/flyctl/install/
+
+### Deploy
+
+```bash
+# Authenticate with Fly.io
+fly auth login
+
+# Launch the app (first time only)
+fly launch --no-deploy
+
+# Set secrets
+fly secrets set ANTHROPIC_API_KEY=sk-ant-your-key-here
+fly secrets set AUTH_USER=your-username
+fly secrets set AUTH_PASS=your-password
+
+# Create persistent storage for lists.json
+fly volumes create lists_data --size 1 --region sea
+
+# Deploy
+fly deploy
+
+# Open in browser
+fly open
+```
+
+Friends visit the URL and enter the shared username/password.
+
+### Updating
+
+```bash
+git push origin master   # push code changes
+fly deploy               # redeploy to Fly.io
+```
+
+### Notes
+
+- `lists.json` is stored on a persistent Fly volume at `/data/lists.json` — it survives deploys
+- Auth is optional locally: leave `AUTH_USER` and `AUTH_PASS` blank in `.env` to skip the login prompt
+- Region `sea` = Seattle — change in `fly.toml` if you prefer another region

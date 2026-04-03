@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import secrets
 import time
 from datetime import date
 from io import BytesIO
@@ -10,8 +11,9 @@ from typing import List
 import anthropic
 import openpyxl
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response, StreamingResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
@@ -23,8 +25,35 @@ API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 MODEL_NAME = os.getenv("MODEL_NAME", "claude-sonnet-4-5")
 PORT = int(os.getenv("PORT", "8000"))
 LISTS_FILE = os.getenv("LISTS_FILE", "lists.json")
+AUTH_USER = os.getenv("AUTH_USER", "")
+AUTH_PASS = os.getenv("AUTH_PASS", "")
 
 app = FastAPI()
+
+# ---------------------------------------------------------------------------
+# Optional Basic Auth (enabled when AUTH_USER and AUTH_PASS are set)
+# ---------------------------------------------------------------------------
+security = HTTPBasic(auto_error=False)
+
+
+async def check_auth(credentials: HTTPBasicCredentials = Depends(security)):
+    if not AUTH_USER or not AUTH_PASS:
+        return  # Auth disabled — local dev
+    if credentials is None:
+        raise HTTPException(
+            status_code=401,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    user_ok = secrets.compare_digest(credentials.username.encode(), AUTH_USER.encode())
+    pass_ok = secrets.compare_digest(credentials.password.encode(), AUTH_PASS.encode())
+    if not (user_ok and pass_ok):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid credentials",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -72,17 +101,17 @@ class GenerateRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 @app.get("/")
-async def root():
+async def root(_=Depends(check_auth)):
     return FileResponse("static/index.html")
 
 
 @app.get("/api/lists")
-async def get_lists():
+async def get_lists(_=Depends(check_auth)):
     return _read_lists()
 
 
 @app.post("/api/lists")
-async def create_list(payload: ListCreate):
+async def create_list(payload: ListCreate, _=Depends(check_auth)):
     lists = _read_lists()
     entry = {
         "id": str(int(time.time() * 1000)),
@@ -97,7 +126,7 @@ async def create_list(payload: ListCreate):
 
 
 @app.delete("/api/lists/{list_id}")
-async def delete_list(list_id: str):
+async def delete_list(list_id: str, _=Depends(check_auth)):
     lists = _read_lists()
     filtered = [l for l in lists if l["id"] != list_id]
     if len(filtered) == len(lists):
@@ -107,7 +136,7 @@ async def delete_list(list_id: str):
 
 
 @app.post("/api/import-xlsx")
-async def import_xlsx(files: List[UploadFile]):
+async def import_xlsx(files: List[UploadFile], _=Depends(check_auth)):
     """Bulk import .xlsx files as gear lists. Extracts all sheets from each file."""
     imported = []
     lists = _read_lists()
@@ -167,7 +196,7 @@ async def import_xlsx(files: List[UploadFile]):
 
 
 @app.post("/api/generate")
-async def generate(req: GenerateRequest):
+async def generate(req: GenerateRequest, _=Depends(check_auth)):
     if not API_KEY:
         raise HTTPException(status_code=500, detail="ANTHROPIC_API_KEY not configured")
 
@@ -353,7 +382,7 @@ def _parse_markdown_to_rows(text: str) -> list[dict]:
 
 
 @app.post("/api/export-xlsx")
-async def export_xlsx(req: ExportRequest):
+async def export_xlsx(req: ExportRequest, _=Depends(check_auth)):
     rows = _parse_markdown_to_rows(req.markdown)
     person_count = _parse_group_count(req.group_size)
 
