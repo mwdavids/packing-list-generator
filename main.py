@@ -202,7 +202,8 @@ Organize by category (Navigation, Shelter, Sleep system, Clothing layers, \
 Food & water, Safety, Tools, Personal — use categories appropriate to this \
 trip type).
 
-Format each category as a markdown heading (## CATEGORY NAME) followed by a \
+Format each category as a markdown heading (## Category Name) in normal case \
+(e.g. "## Navigation & Communication", not "## NAVIGATION & COMMUNICATION") followed by a \
 markdown table with these exact columns:
 
 | Item | Priority | Notes |
@@ -291,7 +292,8 @@ def _parse_markdown_to_rows(text: str) -> list[dict]:
                 category = ""
                 continue
             in_key_considerations = False
-            category = h
+            # Normalize to title case
+            category = h if not h.isupper() else h.title()
             rows.append({"type": "header", "category": category})
             continue
 
