@@ -197,11 +197,20 @@ Notes: {req.notes}
 {past_lists_block}
 Organize by category (Navigation, Shelter, Sleep system, Clothing layers, \
 Food & water, Safety, Tools, Personal — use categories appropriate to this \
-trip type). For each item mark ESSENTIAL or OPTIONAL and add a brief note \
-where useful. Be specific to the trip type, season, terrain, and duration.
+trip type).
+
+Format each category as a markdown heading (## CATEGORY NAME) followed by a \
+markdown table with these exact columns:
+
+| Item | Priority | Notes |
+|------|----------|-------|
+| Item name | ESSENTIAL or OPTIONAL | Brief note |
+
+Be specific to the trip type, season, terrain, and duration.
 
 End with a "Key considerations" section with 2–3 specific tips for this \
-trip type, location, and season combination."""
+trip type, location, and season combination. Write Key considerations as \
+numbered prose paragraphs, not tables."""
 
     client = anthropic.Anthropic(api_key=API_KEY)
 
