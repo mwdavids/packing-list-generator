@@ -16,6 +16,7 @@
   --text-muted: #9a958e;
   --border: #3d3937;
   --success: #7daa6e;
+  --danger: #c45b5b;
   --radius: 8px;
 }
 * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -26,9 +27,44 @@ body {
   min-height: 100vh;
 }
 .container { max-width: 900px; margin: 0 auto; padding: 20px; }
-header { text-align: center; padding: 24px 0 16px; }
+header { padding: 24px 0 16px; }
+.header-row { display: flex; justify-content: space-between; align-items: center; }
 header h1 { font-size: 1.6rem; font-weight: 600; }
-header p { color: var(--text-muted); font-size: 0.9rem; margin-top: 4px; }
+header p { color: var(--text-muted); font-size: 0.9rem; margin-top: 4px; text-align: center; }
+.user-bar { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; }
+.user-bar span { color: var(--text-muted); }
+.user-bar button { background: none; border: 1px solid var(--border); color: var(--text-muted); padding: 4px 10px; border-radius: var(--radius); cursor: pointer; font-size: 0.8rem; }
+.user-bar button:hover { border-color: var(--accent); color: var(--text); }
+
+/* Auth modal */
+.auth-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.75);
+  display: flex; align-items: center; justify-content: center; z-index: 200;
+}
+.auth-box {
+  background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+  padding: 32px; width: 380px; max-width: 90vw;
+}
+.auth-box h2 { font-size: 1.2rem; margin-bottom: 4px; text-align: center; }
+.auth-box .subtitle { color: var(--text-muted); font-size: 0.85rem; text-align: center; margin-bottom: 20px; }
+.auth-box .form-group { margin-bottom: 12px; }
+.auth-box label { font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px; }
+.auth-box input { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 10px 12px; border-radius: var(--radius); font-size: 0.95rem; }
+.auth-box input:focus { outline: none; border-color: var(--accent); }
+.auth-box .btn { width: 100%; margin-top: 8px; }
+.auth-box .toggle { text-align: center; margin-top: 14px; font-size: 0.85rem; color: var(--text-muted); }
+.auth-box .toggle a { color: var(--accent); cursor: pointer; text-decoration: none; }
+.auth-box .toggle a:hover { text-decoration: underline; }
+.auth-error { background: rgba(196,91,91,0.15); border: 1px solid var(--danger); color: #e8a0a0; padding: 8px 12px; border-radius: var(--radius); font-size: 0.85rem; margin-bottom: 12px; display: none; }
+
+/* Fork banner */
+.fork-banner {
+  background: var(--surface); border: 1px solid var(--accent); border-radius: var(--radius);
+  padding: 16px 20px; margin-bottom: 20px; display: none;
+}
+.fork-banner p { font-size: 0.9rem; margin-bottom: 10px; }
+.fork-banner .meta { color: var(--text-muted); font-size: 0.8rem; margin-bottom: 10px; }
+.fork-banner .btn-group { display: flex; gap: 8px; }
 
 /* Tabs */
 .tabs { display: flex; gap: 4px; border-bottom: 2px solid var(--border); margin-bottom: 20px; }
@@ -142,23 +178,88 @@ textarea { resize: vertical; min-height: 80px; }
 .bulk-import p { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 10px; }
 .bulk-import .result { margin-top: 12px; font-size: 0.85rem; color: var(--success); }
 
+/* Share URL */
+.share-url {
+  background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 8px 12px; font-size: 0.8rem; color: var(--accent); word-break: break-all;
+  margin-top: 8px; display: none;
+}
+
 @media (max-width: 600px) {
   .form-grid { grid-template-columns: 1fr; }
   .tabs { overflow-x: auto; }
+  .header-row { flex-direction: column; gap: 8px; }
 }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
 <body>
+
+<!-- ===== AUTH MODAL ===== -->
+<div id="auth-modal" class="auth-overlay" style="display:none">
+  <div class="auth-box">
+    <h2>Packing List Generator</h2>
+    <p class="subtitle">Sign in to manage your gear lists and generate packing lists</p>
+    <div id="auth-error" class="auth-error"></div>
+
+    <div id="login-form">
+      <div class="form-group">
+        <label for="login-username">Username</label>
+        <input type="text" id="login-username" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" autocomplete="current-password">
+      </div>
+      <button class="btn btn-primary" id="login-btn">Sign in</button>
+      <div class="toggle">No account? <a id="show-register">Create one</a></div>
+    </div>
+
+    <div id="register-form" style="display:none">
+      <div class="form-group">
+        <label for="reg-display">Display name</label>
+        <input type="text" id="reg-display" placeholder="e.g. Michael">
+      </div>
+      <div class="form-group">
+        <label for="reg-username">Username</label>
+        <input type="text" id="reg-username" placeholder="letters, numbers, - _" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label for="reg-password">Password</label>
+        <input type="password" id="reg-password" placeholder="6+ characters" autocomplete="new-password">
+      </div>
+      <button class="btn btn-primary" id="register-btn">Create account</button>
+      <div class="toggle">Already have an account? <a id="show-login">Sign in</a></div>
+    </div>
+  </div>
+</div>
+
 <div class="container">
   <header>
-    <h1><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px;margin-right:4px;"><polyline points="2,20 7,12 10,15 15,5 20,13 22,20"/></svg>Packing List Generator</h1>
+    <div class="header-row">
+      <h1><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-4px;margin-right:4px;"><polyline points="2,20 7,12 10,15 15,5 20,13 22,20"/></svg>Packing List Generator</h1>
+      <div class="user-bar" id="user-info" style="display:none">
+        <span id="user-display"></span>
+        <button id="logout-btn">Sign out</button>
+      </div>
+    </div>
     <p class="subtitle">Upload past packing lists to refine results, or jump straight to generating a new one.</p>
   </header>
+
+  <!-- Fork base lists banner -->
+  <div id="fork-banner" class="fork-banner">
+    <p><strong>Welcome!</strong> Michael's curated gear library is available. Want to start with it as your base?</p>
+    <div class="meta">You can always add, remove, or edit lists later.</div>
+    <div class="btn-group">
+      <button class="btn btn-primary btn-sm" id="fork-btn">Copy base library</button>
+      <button class="btn btn-secondary btn-sm" id="skip-fork-btn">Start fresh</button>
+    </div>
+  </div>
 
   <div class="tabs">
     <button class="tab-btn active" data-tab="generate">Generate</button>
     <button class="tab-btn" data-tab="lists">My Lists <span class="badge" id="list-count">0</span></button>
+    <button class="tab-btn" data-tab="history">Trip History <span class="badge" id="history-count">0</span></button>
     <button class="tab-btn" data-tab="current">Current List</button>
   </div>
 
@@ -276,7 +377,15 @@ textarea { resize: vertical; min-height: 80px; }
     <div id="lists-container"></div>
   </div>
 
-  <!-- ===== TAB 3: CURRENT LIST ===== -->
+  <!-- ===== TAB 3: TRIP HISTORY ===== -->
+  <div id="tab-history" class="tab-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h2 style="font-size:1.1rem;">Trip History</h2>
+    </div>
+    <div id="history-container"></div>
+  </div>
+
+  <!-- ===== TAB 4: CURRENT LIST ===== -->
   <div id="tab-current" class="tab-panel">
     <div class="output-header">
       <h2 id="output-title">No list generated yet</h2>
@@ -287,14 +396,54 @@ textarea { resize: vertical; min-height: 80px; }
       <button class="btn btn-secondary btn-sm" id="copy-text-btn">Copy text</button>
       <button class="btn btn-secondary btn-sm" id="copy-csv-btn">Copy as CSV (for Sheets)</button>
       <button class="btn btn-secondary btn-sm" id="download-xlsx-btn">Download .xlsx</button>
+      <button class="btn btn-secondary btn-sm" id="share-btn">Share link</button>
       <button class="btn btn-primary btn-sm" id="new-list-btn">New list</button>
     </div>
+    <div class="share-url" id="share-url"></div>
   </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+let currentUser = null;
+let savedLists = [];
+let generations = [];
+let currentOutput = '';
+let currentMeta = {};
+let currentShareToken = null;
+let currentGenId = null;
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+async function apiFetch(url, options = {}) {
+  const res = await fetch(url, options);
+  if (res.status === 401) {
+    currentUser = null;
+    document.getElementById('user-info').style.display = 'none';
+    document.getElementById('auth-modal').style.display = 'flex';
+    throw new Error('Session expired');
+  }
+  return res;
+}
+
 // ---------------------------------------------------------------------------
 // Tab switching
 // ---------------------------------------------------------------------------
@@ -308,25 +457,140 @@ function switchTab(name) {
 tabBtns.forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
 
 // ---------------------------------------------------------------------------
-// Toast
+// Auth
 // ---------------------------------------------------------------------------
-function toast(msg) {
-  const el = document.getElementById('toast');
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
   el.textContent = msg;
-  el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), 2200);
+  el.style.display = 'block';
 }
+function hideAuthError() {
+  document.getElementById('auth-error').style.display = 'none';
+}
+
+document.getElementById('show-register').onclick = () => {
+  document.getElementById('login-form').style.display = 'none';
+  document.getElementById('register-form').style.display = 'block';
+  hideAuthError();
+};
+document.getElementById('show-login').onclick = () => {
+  document.getElementById('register-form').style.display = 'none';
+  document.getElementById('login-form').style.display = 'block';
+  hideAuthError();
+};
+
+document.getElementById('login-btn').onclick = async () => {
+  hideAuthError();
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  if (!username || !password) { showAuthError('Please fill in all fields'); return; }
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, password}),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      showAuthError(err.detail || 'Login failed');
+      return;
+    }
+    await onAuthenticated();
+  } catch(e) {
+    showAuthError('Login failed');
+  }
+};
+
+document.getElementById('login-password').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('login-btn').click();
+});
+
+document.getElementById('register-btn').onclick = async () => {
+  hideAuthError();
+  const display_name = document.getElementById('reg-display').value.trim();
+  const username = document.getElementById('reg-username').value.trim();
+  const password = document.getElementById('reg-password').value;
+  if (!display_name || !username || !password) { showAuthError('Please fill in all fields'); return; }
+  if (username.length < 3) { showAuthError('Username must be at least 3 characters'); return; }
+  if (password.length < 6) { showAuthError('Password must be at least 6 characters'); return; }
+  if (!/^[a-zA-Z0-9_-]+$/.test(username)) { showAuthError('Username can only contain letters, numbers, - and _'); return; }
+  try {
+    const res = await fetch('/api/register', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({username, password, display_name}),
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      showAuthError(err.detail || 'Registration failed');
+      return;
+    }
+    await onAuthenticated();
+  } catch(e) {
+    showAuthError('Registration failed');
+  }
+};
+
+document.getElementById('reg-password').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') document.getElementById('register-btn').click();
+});
+
+document.getElementById('logout-btn').onclick = async () => {
+  await fetch('/api/logout', {method: 'POST'});
+  currentUser = null;
+  savedLists = [];
+  generations = [];
+  document.getElementById('user-info').style.display = 'none';
+  document.getElementById('auth-modal').style.display = 'flex';
+  document.getElementById('login-form').style.display = 'block';
+  document.getElementById('register-form').style.display = 'none';
+};
+
+async function onAuthenticated() {
+  const meRes = await fetch('/api/me');
+  currentUser = await meRes.json();
+  if (!currentUser.authenticated) {
+    document.getElementById('auth-modal').style.display = 'flex';
+    return;
+  }
+  document.getElementById('auth-modal').style.display = 'none';
+  document.getElementById('user-info').style.display = 'flex';
+  document.getElementById('user-display').textContent = currentUser.display_name;
+
+  if (currentUser.base_library_available && !currentUser.has_lists && !currentUser.is_base_user) {
+    document.getElementById('fork-banner').style.display = 'block';
+  }
+
+  loadLists();
+  loadHistory();
+}
+
+// ---------------------------------------------------------------------------
+// Fork base lists
+// ---------------------------------------------------------------------------
+document.getElementById('fork-btn').onclick = async () => {
+  try {
+    const res = await apiFetch('/api/fork-base-lists', {method: 'POST'});
+    const data = await res.json();
+    document.getElementById('fork-banner').style.display = 'none';
+    toast(`Copied ${data.copied} lists from the base library`);
+    loadLists();
+  } catch {}
+};
+document.getElementById('skip-fork-btn').onclick = () => {
+  document.getElementById('fork-banner').style.display = 'none';
+};
 
 // ---------------------------------------------------------------------------
 // Lists management
 // ---------------------------------------------------------------------------
-let savedLists = [];
-
 async function loadLists() {
-  const res = await fetch('/api/lists');
-  savedLists = await res.json();
-  document.getElementById('list-count').textContent = savedLists.length;
-  renderLists();
+  try {
+    const res = await apiFetch('/api/lists');
+    savedLists = await res.json();
+    document.getElementById('list-count').textContent = savedLists.length;
+    renderLists();
+  } catch {}
 }
 
 function renderLists() {
@@ -352,13 +616,6 @@ function renderLists() {
   }).join('');
 }
 
-function esc(s) {
-  const d = document.createElement('div');
-  d.textContent = s;
-  return d.innerHTML;
-}
-
-// Add list form
 const addFormContainer = document.getElementById('add-form-container');
 document.getElementById('show-add-form-btn').onclick = () => { addFormContainer.style.display = 'block'; };
 document.getElementById('cancel-add-btn').onclick = () => { addFormContainer.style.display = 'none'; clearAddForm(); };
@@ -383,67 +640,171 @@ document.getElementById('save-list-btn').onclick = async () => {
   const type = document.getElementById('add-type').value.trim();
   const content = document.getElementById('add-content').value.trim();
   if (!name || !content) { alert('Name and content are required.'); return; }
-  await fetch('/api/lists', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, type, content }),
-  });
-  addFormContainer.style.display = 'none';
-  clearAddForm();
-  toast('List saved');
-  loadLists();
+  try {
+    await apiFetch('/api/lists', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, type, content }),
+    });
+    addFormContainer.style.display = 'none';
+    clearAddForm();
+    toast('List saved');
+    loadLists();
+  } catch {}
 };
 
 window.deleteList = async (id) => {
   if (!confirm('Delete this list?')) return;
-  await fetch('/api/lists/' + id, { method: 'DELETE' });
-  toast('List deleted');
-  loadLists();
+  try {
+    await apiFetch('/api/lists/' + id, { method: 'DELETE' });
+    toast('List deleted');
+    loadLists();
+  } catch {}
 };
+
+// ---------------------------------------------------------------------------
+// Trip History
+// ---------------------------------------------------------------------------
+async function loadHistory() {
+  try {
+    const res = await apiFetch('/api/generations');
+    generations = await res.json();
+    document.getElementById('history-count').textContent = generations.length;
+    renderHistory();
+  } catch {}
+}
+
+function renderHistory() {
+  const c = document.getElementById('history-container');
+  if (generations.length === 0) {
+    c.innerHTML = '<div class="empty-state">No trip history yet. Generate a packing list to see it here.</div>';
+    return;
+  }
+  c.innerHTML = generations.map(g => {
+    const d = g.created_at ? new Date(g.created_at + 'Z').toLocaleDateString() : '';
+    const details = [g.trip_type, g.location, g.season, g.duration].filter(Boolean).join(' \u00b7 ');
+    return `
+      <div class="list-card">
+        <div class="list-card-header">
+          <div>
+            <h3>${esc(g.title || 'Untitled trip')}</h3>
+            <div class="meta">${esc(details)}${details && d ? ' \u00b7 ' : ''}${d}</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0;">
+            <button class="btn btn-secondary btn-sm" onclick="viewGeneration(${g.id})">View</button>
+            <button class="btn btn-secondary btn-sm" onclick="copyShareLink('${g.share_token}')">Share</button>
+            <button class="btn btn-danger btn-sm" onclick="deleteGeneration(${g.id})">Delete</button>
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+window.viewGeneration = async (id) => {
+  try {
+    const res = await apiFetch('/api/generations/' + id);
+    const data = await res.json();
+    currentOutput = data.markdown;
+    currentShareToken = data.share_token;
+    currentGenId = data.id;
+    currentMeta = {
+      trip_type: data.trip_type, location: data.location,
+      duration: data.duration, season: data.season,
+      group_size: data.group_size, weight_priority: data.weight_priority,
+      special_considerations: data.special_considerations, notes: data.notes,
+    };
+    document.getElementById('output-title').textContent = data.title || 'Packing list';
+    const metaParts = [];
+    if (data.special_considerations) metaParts.push(data.special_considerations);
+    metaParts.push(new Date(data.created_at + 'Z').toLocaleDateString());
+    document.getElementById('output-meta').textContent = metaParts.join(' \u00b7 ');
+    document.getElementById('output').innerHTML = marked.parse(data.markdown);
+    document.getElementById('output-actions').style.display = 'flex';
+    document.getElementById('share-url').style.display = 'none';
+    switchTab('current');
+  } catch {}
+};
+
+window.copyShareLink = (token) => {
+  const url = window.location.origin + '/share/' + token;
+  navigator.clipboard.writeText(url).then(() => toast('Share link copied'));
+};
+
+window.deleteGeneration = async (id) => {
+  if (!confirm('Delete this trip from history?')) return;
+  try {
+    await apiFetch('/api/generations/' + id, {method: 'DELETE'});
+    toast('Trip deleted');
+    loadHistory();
+    if (currentGenId === id) {
+      currentOutput = '';
+      currentGenId = null;
+      currentShareToken = null;
+      document.getElementById('output').textContent = '';
+      document.getElementById('output-title').textContent = 'No list generated yet';
+      document.getElementById('output-meta').textContent = '';
+      document.getElementById('output-actions').style.display = 'none';
+      document.getElementById('share-url').style.display = 'none';
+    }
+  } catch {}
+};
+
+async function saveCurrentGeneration() {
+  if (!currentOutput) return;
+  try {
+    const title = document.getElementById('output-title').textContent;
+    const res = await apiFetch('/api/generations', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ ...currentMeta, markdown: currentOutput, title }),
+    });
+    const data = await res.json();
+    currentShareToken = data.share_token;
+    currentGenId = data.id;
+    loadHistory();
+  } catch {}
+}
 
 // ---------------------------------------------------------------------------
 // Generate
 // ---------------------------------------------------------------------------
-let currentOutput = '';
-let currentMeta = {};
-
 document.getElementById('generate-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const fields = ['trip_type','location','duration','season','group_size','weight_priority','special_considerations','notes'];
   const body = {};
   fields.forEach(f => body[f] = document.getElementById(f).value);
 
-  // Switch to current tab
   switchTab('current');
 
   const btn = document.getElementById('generate-btn');
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Generating…';
+  btn.innerHTML = '<span class="spinner"></span> Generating\u2026';
 
-  // Set header — synthesize a short trip summary
-    const summaryParts = [];
-    if (body.duration && body.trip_type) summaryParts.push(body.duration.toLowerCase() + ' ' + body.trip_type.toLowerCase());
-    else if (body.trip_type) summaryParts.push(body.trip_type);
-    if (body.location) summaryParts.push(body.location);
-    if (body.season) summaryParts.push(body.season.toLowerCase());
-    if (body.group_size) summaryParts.push('for ' + body.group_size.toLowerCase());
-    if (body.weight_priority) summaryParts.push('(' + body.weight_priority.toLowerCase() + ')');
-    const title = summaryParts.length ? summaryParts.join(', ') : 'Packing list';
-    // Capitalize first letter
-    document.getElementById('output-title').textContent = title.charAt(0).toUpperCase() + title.slice(1);
-    const metaParts = [];
-    if (body.special_considerations) metaParts.push(body.special_considerations);
+  const summaryParts = [];
+  if (body.duration && body.trip_type) summaryParts.push(body.duration.toLowerCase() + ' ' + body.trip_type.toLowerCase());
+  else if (body.trip_type) summaryParts.push(body.trip_type);
+  if (body.location) summaryParts.push(body.location);
+  if (body.season) summaryParts.push(body.season.toLowerCase());
+  if (body.group_size) summaryParts.push('for ' + body.group_size.toLowerCase());
+  if (body.weight_priority) summaryParts.push('(' + body.weight_priority.toLowerCase() + ')');
+  const title = summaryParts.length ? summaryParts.join(', ') : 'Packing list';
+  document.getElementById('output-title').textContent = title.charAt(0).toUpperCase() + title.slice(1);
+  const metaParts = [];
+  if (body.special_considerations) metaParts.push(body.special_considerations);
   if (savedLists.length > 0) metaParts.push('informed by ' + savedLists.length + ' saved list' + (savedLists.length > 1 ? 's' : ''));
-  document.getElementById('output-meta').textContent = metaParts.join(' · ');
+  document.getElementById('output-meta').textContent = metaParts.join(' \u00b7 ');
   currentMeta = body;
 
   const outputEl = document.getElementById('output');
   outputEl.textContent = '';
   currentOutput = '';
+  currentShareToken = null;
+  currentGenId = null;
   document.getElementById('output-actions').style.display = 'none';
+  document.getElementById('share-url').style.display = 'none';
 
   try {
-    const res = await fetch('/api/generate', {
+    const res = await apiFetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -478,11 +839,16 @@ document.getElementById('generate-form').addEventListener('submit', async (e) =>
       }
     }
   } catch (err) {
-    outputEl.textContent = 'Error: ' + err.message;
+    if (err.message !== 'Session expired') {
+      outputEl.textContent = 'Error: ' + err.message;
+    }
   } finally {
     btn.disabled = false;
     btn.innerHTML = 'Generate packing list';
-    document.getElementById('output-actions').style.display = 'flex';
+    if (currentOutput) {
+      document.getElementById('output-actions').style.display = 'flex';
+      saveCurrentGeneration();
+    }
   }
 });
 
@@ -495,17 +861,26 @@ document.getElementById('copy-text-btn').onclick = () => {
 
 document.getElementById('copy-csv-btn').onclick = () => {
   const tsv = parseToTSV(currentOutput);
-  navigator.clipboard.writeText(tsv).then(() => toast('Copied as TSV — paste into Google Sheets'));
+  navigator.clipboard.writeText(tsv).then(() => toast('Copied as TSV \u2014 paste into Google Sheets'));
+};
+
+document.getElementById('share-btn').onclick = () => {
+  if (!currentShareToken) { toast('Saving\u2026'); return; }
+  const url = window.location.origin + '/share/' + currentShareToken;
+  navigator.clipboard.writeText(url).then(() => toast('Share link copied'));
+  const el = document.getElementById('share-url');
+  el.textContent = url;
+  el.style.display = 'block';
 };
 
 document.getElementById('download-xlsx-btn').onclick = async () => {
   const btn = document.getElementById('download-xlsx-btn');
   btn.disabled = true;
-  btn.textContent = 'Generating…';
+  btn.textContent = 'Generating\u2026';
   try {
     const parts = [currentMeta.trip_type, currentMeta.location, currentMeta.season, currentMeta.duration].filter(Boolean);
-    const title = parts.join(' — ') || 'Packing List';
-    const res = await fetch('/api/export-xlsx', {
+    const title = parts.join(' \u2014 ') || 'Packing List';
+    const res = await apiFetch('/api/export-xlsx', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -532,7 +907,7 @@ document.getElementById('download-xlsx-btn').onclick = async () => {
     URL.revokeObjectURL(url);
     toast('Downloaded .xlsx');
   } catch (err) {
-    toast('Export failed: ' + err.message);
+    if (err.message !== 'Session expired') toast('Export failed: ' + err.message);
   } finally {
     btn.disabled = false;
     btn.textContent = 'Download .xlsx';
@@ -541,45 +916,42 @@ document.getElementById('download-xlsx-btn').onclick = async () => {
 
 document.getElementById('new-list-btn').onclick = () => {
   currentOutput = '';
+  currentShareToken = null;
+  currentGenId = null;
   document.getElementById('output').textContent = '';
   document.getElementById('output-title').textContent = 'No list generated yet';
   document.getElementById('output-meta').textContent = '';
   document.getElementById('output-actions').style.display = 'none';
+  document.getElementById('share-url').style.display = 'none';
   switchTab('generate');
 };
 
+// ---------------------------------------------------------------------------
+// parseToTSV
+// ---------------------------------------------------------------------------
 function parseToTSV(text) {
   const lines = text.split('\n');
   let category = '';
   const rows = ['Category\tItem\tEssential\tNote'];
-  // Track which column index holds item/priority/notes in markdown tables
   let colMap = null;
 
   for (const raw of lines) {
     const line = raw.trim();
     if (!line) continue;
 
-    // Detect category headers: "## Category" or "**Category**" or "CATEGORY:" at start
     const headerMatch = line.match(/^#{1,3}\s+(.+)/) || line.match(/^\*\*(.+?)\*\*\s*$/) || line.match(/^([A-Z][A-Za-z &\/()]+):$/);
     if (headerMatch) {
       const h = headerMatch[1].trim();
-      // Skip meta sections
       if (/key\s+considerations|weight\s+check|partner\s+coordination/i.test(h)) { category = ''; colMap = null; continue; }
       category = h;
-      colMap = null; // reset column mapping for new category
+      colMap = null;
       continue;
     }
 
     if (!category) continue;
-
-    // Skip key-considerations / weight-check prose
     if (/key\s+considerations|weight\s+check/i.test(line)) { category = ''; colMap = null; continue; }
-
-    // --- Markdown table handling ---
-    // Separator row like |------|----------|-------|
     if (/^\|[\s\-:]+\|/.test(line)) continue;
 
-    // Table header row — detect column positions
     if (/^\|.*\bItem\b.*\|/i.test(line)) {
       const cols = line.split('|').map(c => c.trim().toLowerCase()).filter(Boolean);
       colMap = { item: -1, priority: -1, notes: -1 };
@@ -587,18 +959,15 @@ function parseToTSV(text) {
         if (/^item/.test(c)) colMap.item = i;
         else if (/priority|essential/.test(c)) colMap.priority = i;
         else if (/note|description/.test(c)) colMap.notes = i;
-        else if (/who/.test(c)) colMap.notes = i; // "Who Carries" tables
+        else if (/who/.test(c)) colMap.notes = i;
       });
       continue;
     }
 
-    // Table data row
     if (line.startsWith('|') && line.endsWith('|')) {
       const cells = line.split('|').slice(1, -1).map(c => c.trim());
       if (cells.length < 2) continue;
-
       let item = '', essential = '', note = '';
-
       if (colMap && colMap.item >= 0) {
         item = cells[colMap.item] || '';
         const prio = colMap.priority >= 0 ? (cells[colMap.priority] || '') : '';
@@ -607,49 +976,35 @@ function parseToTSV(text) {
         else if (/optional/i.test(prio)) essential = 'Optional';
         else if (!prio || prio === '-') essential = 'Yes';
       } else {
-        // Fallback: first cell = item, look for ESSENTIAL/OPTIONAL anywhere
         item = cells[0];
         const rest = cells.slice(1).join(' ');
         if (/essential/i.test(rest)) essential = 'Yes';
         else if (/optional/i.test(rest)) essential = 'Optional';
         note = cells.length > 2 ? cells[cells.length - 1] : '';
       }
-
-      // Clean markdown bold/italic
       item = item.replace(/\*\*/g, '').replace(/[*_]/g, '').trim();
       note = note.replace(/\*\*/g, '').replace(/[*_]/g, '').trim();
       if (!item || item === '-') continue;
-
       rows.push([category, item, essential, note].join('\t'));
       continue;
     }
 
-    // --- Bullet / dash list fallback ---
     const itemMatch = line.match(/^[-*\d.)\s]+(.+)/);
     if (!itemMatch) continue;
     let itemText = itemMatch[1].trim();
-
     let essential = '';
     if (/\bESSENTIAL\b/i.test(itemText)) { essential = 'Yes'; itemText = itemText.replace(/\bESSENTIAL\b/gi, ''); }
     else if (/\bOPTIONAL\b/i.test(itemText)) { essential = 'Optional'; itemText = itemText.replace(/\bOPTIONAL\b/gi, ''); }
-
     let item = itemText, note = '';
     const splitMatch = itemText.match(/^(.+?)\s*[—–\-:]\s+(.+)$/);
     if (splitMatch) { item = splitMatch[1]; note = splitMatch[2]; }
-
     item = item.replace(/^\*\*|\*\*$/g, '').replace(/[*_]/g, '').trim();
     note = note.replace(/[*_]/g, '').trim();
     if (!item) continue;
-
     rows.push([category, item, essential, note].join('\t'));
   }
   return rows.join('\n');
 }
-
-// ---------------------------------------------------------------------------
-// Init
-// ---------------------------------------------------------------------------
-loadLists();
 
 // ---------------------------------------------------------------------------
 // Bulk xlsx import
@@ -671,11 +1026,11 @@ bulkZone.addEventListener('drop', (e) => {
 });
 
 async function uploadXlsx(fileList) {
-  bulkResult.textContent = 'Importing…';
+  bulkResult.textContent = 'Importing\u2026';
   const fd = new FormData();
   for (const f of fileList) fd.append('files', f);
   try {
-    const res = await fetch('/api/import-xlsx', { method: 'POST', body: fd });
+    const res = await apiFetch('/api/import-xlsx', { method: 'POST', body: fd });
     const data = await res.json();
     if (data.count === 0) {
       bulkResult.textContent = 'No lists found in the uploaded files.';
@@ -686,9 +1041,36 @@ async function uploadXlsx(fileList) {
     loadLists();
     toast(`Imported ${data.count} list${data.count > 1 ? 's' : ''}`);
   } catch (err) {
-    bulkResult.textContent = 'Import failed: ' + err.message;
+    if (err.message !== 'Session expired') bulkResult.textContent = 'Import failed: ' + err.message;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Init
+// ---------------------------------------------------------------------------
+(async function init() {
+  try {
+    const res = await fetch('/api/me');
+    const me = await res.json();
+    if (!me.authenticated) {
+      document.getElementById('auth-modal').style.display = 'flex';
+      return;
+    }
+    currentUser = me;
+    document.getElementById('auth-modal').style.display = 'none';
+    document.getElementById('user-info').style.display = 'flex';
+    document.getElementById('user-display').textContent = me.display_name;
+
+    if (me.base_library_available && !me.has_lists && !me.is_base_user) {
+      document.getElementById('fork-banner').style.display = 'block';
+    }
+
+    loadLists();
+    loadHistory();
+  } catch {
+    document.getElementById('auth-modal').style.display = 'flex';
+  }
+})();
 </script>
 </body>
 </html>

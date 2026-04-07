@@ -3,3 +3,7 @@ lists.json
 __pycache__/
 *.pyc
 *.pyo
+packinglist.db
+packinglist.db-wal
+packinglist.db-shm
+.jwt_secret
