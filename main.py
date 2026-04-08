@@ -92,41 +92,40 @@ def get_db() -> sqlite3.Connection:
 
 def init_db():
     Path(DATABASE_PATH).parent.mkdir(parents=True, exist_ok=True)
-    db = get_db()
-    db.executescript("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL COLLATE NOCASE,
-            password_hash TEXT NOT NULL,
-            display_name TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            is_base_user INTEGER NOT NULL DEFAULT 0
-        );
-        CREATE TABLE IF NOT EXISTS lists (
-            id TEXT PRIMARY KEY,
-            user_id INTEGER NOT NULL REFERENCES users(id),
-            name TEXT NOT NULL,
-            type TEXT NOT NULL DEFAULT '',
-            date_added TEXT NOT NULL,
-            content TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS generations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL REFERENCES users(id),
-            trip_type TEXT NOT NULL DEFAULT '',
-            location TEXT NOT NULL DEFAULT '',
-            duration TEXT NOT NULL DEFAULT '',
-            season TEXT NOT NULL DEFAULT '',
-            group_size TEXT NOT NULL DEFAULT '',
-            weight_priority TEXT NOT NULL DEFAULT '',
-            special_considerations TEXT NOT NULL DEFAULT '',
-            notes TEXT NOT NULL DEFAULT '',
-            markdown TEXT NOT NULL,
-            title TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            share_token TEXT UNIQUE
-        );
-    """)
+    db = sqlite3.connect(DATABASE_PATH, timeout=30)
+    db.row_factory = sqlite3.Row
+    db.execute("""CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL COLLATE NOCASE,
+        password_hash TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        is_base_user INTEGER NOT NULL DEFAULT 0
+    )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS lists (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        name TEXT NOT NULL,
+        type TEXT NOT NULL DEFAULT '',
+        date_added TEXT NOT NULL,
+        content TEXT NOT NULL
+    )""")
+    db.execute("""CREATE TABLE IF NOT EXISTS generations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        trip_type TEXT NOT NULL DEFAULT '',
+        location TEXT NOT NULL DEFAULT '',
+        duration TEXT NOT NULL DEFAULT '',
+        season TEXT NOT NULL DEFAULT '',
+        group_size TEXT NOT NULL DEFAULT '',
+        weight_priority TEXT NOT NULL DEFAULT '',
+        special_considerations TEXT NOT NULL DEFAULT '',
+        notes TEXT NOT NULL DEFAULT '',
+        markdown TEXT NOT NULL,
+        title TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        share_token TEXT UNIQUE
+    )""")
     if db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
         _migrate_from_json(db)
     db.commit()
