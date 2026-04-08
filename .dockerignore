@@ -1,6 +1,9 @@
 .env
-lists.json
 __pycache__
 *.pyc
 *.pyo
 .git
+packinglist.db
+packinglist.db-wal
+packinglist.db-shm
+.jwt_secret
