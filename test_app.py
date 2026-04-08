@@ -21,6 +21,7 @@ def _isolated_db(tmp_path, monkeypatch):
     monkeypatch.setenv("BASE_USER", "baseuser")
     monkeypatch.setenv("BASE_PASS", "basepass123")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "")
+    monkeypatch.setenv("INVITE_CODE", "")  # disabled by default in tests
 
     # Re-import to pick up new env vars and reinit DB
     import importlib
@@ -30,6 +31,8 @@ def _isolated_db(tmp_path, monkeypatch):
     main_mod.LISTS_FILE = str(tmp_path / "nonexistent.json")
     main_mod.BASE_USER = "baseuser"
     main_mod.BASE_PASS = "basepass123"
+    main_mod.INVITE_CODE = ""
+    main_mod._login_attempts.clear()  # reset rate limiter between tests
     main_mod.init_db()
 
 
@@ -39,9 +42,10 @@ def client():
     return TestClient(app)
 
 
-def _register(client, username="alice", password="pass1234", display_name="Alice"):
+def _register(client, username="alice", password="pass1234", display_name="Alice", invite_code=""):
     return client.post("/api/register", json={
         "username": username, "password": password, "display_name": display_name,
+        "invite_code": invite_code,
     })
 
 
@@ -391,3 +395,65 @@ class TestMigration:
         lists_rows = db.execute("SELECT * FROM lists").fetchall()
         assert len(lists_rows) == 2
         db.close()
+
+
+# =========================================================================
+# Rate limiting
+# =========================================================================
+
+class TestRateLimit:
+    def test_rate_limit_blocks_after_max_attempts(self, client):
+        _register(client, username="ratelimituser")
+        client.post("/api/logout")
+        for _ in range(5):
+            r = _login(client, username="ratelimituser", password="wrongpass")
+            assert r.status_code == 401
+        # 6th attempt should be blocked
+        r = _login(client, username="ratelimituser", password="wrongpass")
+        assert r.status_code == 429
+        assert "Too many" in r.json()["detail"]
+
+    def test_successful_login_clears_attempts(self, client):
+        _register(client, username="clearuser")
+        client.post("/api/logout")
+        for _ in range(3):
+            _login(client, username="clearuser", password="wrongpass")
+        # Successful login should clear counter
+        r = _login(client, username="clearuser", password="pass1234")
+        assert r.status_code == 200
+        # Should be able to fail again without hitting limit
+        client.post("/api/logout")
+        for _ in range(4):
+            r = _login(client, username="clearuser", password="wrongpass")
+            assert r.status_code == 401
+
+
+# =========================================================================
+# Invite code
+# =========================================================================
+
+class TestInviteCode:
+    def test_no_invite_code_required_when_not_set(self, client):
+        """When INVITE_CODE is empty, registration should work without one."""
+        r = _register(client)
+        assert r.status_code == 200
+
+    def test_invite_code_required_when_set(self, client):
+        import main as main_mod
+        main_mod.INVITE_CODE = "secret-invite-123"
+        r = _register(client, username="noinvite")
+        assert r.status_code == 403
+        assert "invite" in r.json()["detail"].lower()
+
+    def test_wrong_invite_code_rejected(self, client):
+        import main as main_mod
+        main_mod.INVITE_CODE = "secret-invite-123"
+        r = _register(client, username="wrongcode", invite_code="bad-code")
+        assert r.status_code == 403
+
+    def test_correct_invite_code_accepted(self, client):
+        import main as main_mod
+        main_mod.INVITE_CODE = "secret-invite-123"
+        r = _register(client, username="goodcode", invite_code="secret-invite-123")
+        assert r.status_code == 200
+        assert r.json()["ok"] is True

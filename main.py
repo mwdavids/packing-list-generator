@@ -34,6 +34,11 @@ JWT_SECRET = os.getenv("JWT_SECRET", "")
 LISTS_FILE = os.getenv("LISTS_FILE", "lists.json")  # migration source only
 BASE_USER = os.getenv("BASE_USER", "michael")
 BASE_PASS = os.getenv("BASE_PASS", "changeme")
+INVITE_CODE = os.getenv("INVITE_CODE", "")  # required for registration when set
+
+# Rate limit: max failed login attempts per IP
+LOGIN_MAX_ATTEMPTS = 5
+LOGIN_WINDOW_SECONDS = 300  # 5 minutes
 
 # Persist a random JWT secret across restarts when not set via env
 if not JWT_SECRET:
@@ -46,6 +51,32 @@ if not JWT_SECRET:
         _sp.write_text(JWT_SECRET)
 
 app = FastAPI()
+
+# ---------------------------------------------------------------------------
+# Rate limiter (in-memory, resets on restart — fine for this scale)
+# ---------------------------------------------------------------------------
+_login_attempts: dict[str, list[float]] = {}  # ip -> [timestamps]
+
+
+def _check_rate_limit(ip: str) -> None:
+    now = time.time()
+    attempts = _login_attempts.get(ip, [])
+    # Prune old attempts outside the window
+    attempts = [t for t in attempts if now - t < LOGIN_WINDOW_SECONDS]
+    _login_attempts[ip] = attempts
+    if len(attempts) >= LOGIN_MAX_ATTEMPTS:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many login attempts. Try again in {LOGIN_WINDOW_SECONDS // 60} minutes.",
+        )
+
+
+def _record_failed_login(ip: str) -> None:
+    _login_attempts.setdefault(ip, []).append(time.time())
+
+
+def _clear_login_attempts(ip: str) -> None:
+    _login_attempts.pop(ip, None)
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +210,7 @@ class RegisterRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=50, pattern=r"^[a-zA-Z0-9_-]+$")
     password: str = Field(..., min_length=6, max_length=200)
     display_name: str = Field(..., min_length=1, max_length=100)
+    invite_code: str = ""
 
 
 class LoginRequest(BaseModel):
@@ -234,6 +266,8 @@ class ExportRequest(BaseModel):
 
 @app.post("/api/register")
 async def register(req: RegisterRequest):
+    if INVITE_CODE and not secrets.compare_digest(req.invite_code, INVITE_CODE):
+        raise HTTPException(status_code=403, detail="Invalid invite code")
     db = get_db()
     try:
         if db.execute("SELECT 1 FROM users WHERE username = ?", (req.username.lower(),)).fetchone():
@@ -252,7 +286,9 @@ async def register(req: RegisterRequest):
 
 
 @app.post("/api/login")
-async def login(req: LoginRequest):
+async def login(req: LoginRequest, request: Request):
+    ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(ip)
     db = get_db()
     try:
         row = db.execute(
@@ -260,7 +296,9 @@ async def login(req: LoginRequest):
             (req.username.lower(),),
         ).fetchone()
         if not row or not _check_pw(req.password, row["password_hash"]):
+            _record_failed_login(ip)
             raise HTTPException(status_code=401, detail="Invalid username or password")
+        _clear_login_attempts(ip)
         resp = JSONResponse({"ok": True, "username": row["username"], "display_name": row["display_name"]})
         resp.set_cookie("token", _create_token(row["id"], row["username"]), httponly=True, samesite="lax", max_age=30 * 86400)
         return resp

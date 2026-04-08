@@ -228,6 +228,10 @@ textarea { resize: vertical; min-height: 80px; }
         <label for="reg-password">Password</label>
         <input type="password" id="reg-password" placeholder="6+ characters" autocomplete="new-password">
       </div>
+      <div class="form-group">
+        <label for="reg-invite">Invite code</label>
+        <input type="text" id="reg-invite" placeholder="Required to create an account">
+      </div>
       <button class="btn btn-primary" id="register-btn">Create account</button>
       <div class="toggle">Already have an account? <a id="show-login">Sign in</a></div>
     </div>
@@ -510,6 +514,7 @@ document.getElementById('register-btn').onclick = async () => {
   const display_name = document.getElementById('reg-display').value.trim();
   const username = document.getElementById('reg-username').value.trim();
   const password = document.getElementById('reg-password').value;
+  const invite_code = document.getElementById('reg-invite').value.trim();
   if (!display_name || !username || !password) { showAuthError('Please fill in all fields'); return; }
   if (username.length < 3) { showAuthError('Username must be at least 3 characters'); return; }
   if (password.length < 6) { showAuthError('Password must be at least 6 characters'); return; }
@@ -518,7 +523,7 @@ document.getElementById('register-btn').onclick = async () => {
     const res = await fetch('/api/register', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({username, password, display_name}),
+      body: JSON.stringify({username, password, display_name, invite_code}),
     });
     if (!res.ok) {
       const err = await res.json();
