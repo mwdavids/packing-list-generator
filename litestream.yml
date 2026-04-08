@@ -1,0 +1,8 @@
+dbs:
+  - path: /app/data/packinglist.db
+    replicas:
+      - type: abs
+        bucket: litestream
+        path: packinglist.db
+        account-name: ${LITESTREAM_ACCOUNT_NAME}
+        account-key: ${LITESTREAM_ACCOUNT_KEY}

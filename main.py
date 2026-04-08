@@ -29,7 +29,7 @@ load_dotenv()
 API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 MODEL_NAME = os.getenv("MODEL_NAME", "claude-sonnet-4-5")
 PORT = int(os.getenv("PORT", "8000"))
-DATABASE_PATH = os.getenv("DATABASE_PATH", "packinglist.db")
+DATABASE_PATH = os.getenv("DATABASE_PATH", "data/packinglist.db")
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 LISTS_FILE = os.getenv("LISTS_FILE", "lists.json")  # migration source only
 BASE_USER = os.getenv("BASE_USER", "michael")
