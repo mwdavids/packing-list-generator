@@ -2,6 +2,8 @@
 
 A local web app that generates tailored outdoor trip packing lists from natural language trip descriptions, informed by your personal library of past packing lists. Built for PNW outdoor trips — alpine climbing, ski touring, backpacking, rafting, snow camping, day hiking, and more.
 
+![Screenshot](screenshot.png)
+
 ## Setup
 
 ```bash
